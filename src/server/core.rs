@@ -27,158 +27,6 @@ pub struct ChatCore {
     db: Option<Arc<Database>>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::server::state::ChatState;
-    use chrono::Utc;
-    use std::net::SocketAddr;
-    use std::sync::Arc;
-    use tokio::sync::mpsc;
-
-    #[test]
-    fn test_send_private_and_ack() {
-        let state = Arc::new(ChatState::new());
-        let (tx_a, mut rx_a) = mpsc::channel(1000);
-        let (tx_b, mut rx_b) = mpsc::channel(1000);
-
-        let addr_a: SocketAddr = "127.0.0.1:10000".parse().unwrap();
-        let addr_b: SocketAddr = "127.0.0.1:10001".parse().unwrap();
-
-        state.add_client(addr_a, "alice".to_string(), tx_a);
-        state.add_client(addr_b, "bob".to_string(), tx_b);
-
-        let core = ChatCore::new(state.clone());
-
-        core.send_private_message(
-            "alice".into(),
-            "bob".into(),
-            "hello".into(),
-            Utc::now(),
-            Some("mid-1".into()),
-        );
-
-        // bob should receive Private
-        match rx_b.try_recv() {
-            Ok(msg) => match msg {
-                ChatMessage::Private {
-                    from,
-                    to,
-                    content,
-                    message_id,
-                    ..
-                } => {
-                    assert_eq!(from, "alice");
-                    assert_eq!(to, "bob");
-                    assert_eq!(content, "hello");
-                    assert_eq!(message_id, Some("mid-1".into()));
-                }
-                _ => panic!("expected Private"),
-            },
-            Err(e) => panic!("bob did not receive private: {:?}", e),
-        }
-
-        // alice should receive Ack
-        match rx_a.try_recv() {
-            Ok(msg) => match msg {
-                ChatMessage::Ack {
-                    kind, message_id, ..
-                } => {
-                    assert_eq!(kind, AckKind::Delivered);
-                    assert_eq!(message_id, Some("mid-1".into()));
-                }
-                _ => panic!("expected Ack"),
-            },
-            Err(e) => panic!("alice did not receive ack: {:?}", e),
-        }
-    }
-
-    #[test]
-    fn test_dedup() {
-        let state = Arc::new(ChatState::new());
-        assert_eq!(state.check_and_mark_message_id("dup-1"), false);
-        assert_eq!(state.check_and_mark_message_id("dup-1"), true);
-    }
-
-    #[test]
-    fn test_roomtext_barrier_and_broadcast() {
-        let state = Arc::new(ChatState::new());
-        state.init_fixed_rooms();
-
-        let (tx_a, mut rx_a) = mpsc::channel(1000);
-        let (tx_b, mut rx_b) = mpsc::channel(1000);
-
-        let addr_a: SocketAddr = "127.0.0.1:11000".parse().unwrap();
-        let addr_b: SocketAddr = "127.0.0.1:11001".parse().unwrap();
-
-        state.add_client(addr_a, "alice".to_string(), tx_a);
-        state.add_client(addr_b, "bob".to_string(), tx_b);
-
-        let core = ChatCore::new(state.clone());
-
-        // bob joins #rust, alice does not
-        state.join_room("bob", "#rust");
-
-        // alice attempts to send RoomText to #rust (should be denied)
-        core.handle_message(
-            ChatMessage::RoomText {
-                from: "alice".into(),
-                room: "#rust".into(),
-                content: "hi".into(),
-                timestamp: Utc::now(),
-            },
-            addr_a,
-        );
-
-        // alice should receive Ack::Failed
-        match rx_a.try_recv() {
-            Ok(msg) => match msg {
-                ChatMessage::Ack { kind, .. } => {
-                    assert_eq!(kind, AckKind::Failed);
-                }
-                _ => panic!("expected Ack::Failed"),
-            },
-            Err(e) => panic!("alice did not receive ack: {:?}", e),
-        }
-
-        // bob should NOT receive the message
-        match rx_b.try_recv() {
-            Ok(_) => panic!("bob should not receive RoomText"),
-            Err(_) => {}
-        }
-
-        // Now alice joins and sends again
-        state.join_room("alice", "#rust");
-        core.handle_message(
-            ChatMessage::RoomText {
-                from: "alice".into(),
-                room: "#rust".into(),
-                content: "hi2".into(),
-                timestamp: Utc::now(),
-            },
-            addr_a,
-        );
-
-        // bob should receive the RoomText
-        match rx_b.try_recv() {
-            Ok(msg) => match msg {
-                ChatMessage::RoomText {
-                    from,
-                    room,
-                    content,
-                    ..
-                } => {
-                    assert_eq!(from, "alice");
-                    assert_eq!(room, "#rust");
-                    assert_eq!(content, "hi2");
-                }
-                _ => panic!("expected RoomText"),
-            },
-            Err(e) => panic!("bob did not receive roomtext: {:?}", e),
-        }
-    }
-}
-
 impl ChatCore {
     pub fn new(state: Arc<ChatState>) -> Self {
         Self {
@@ -394,7 +242,7 @@ impl ChatCore {
                         .state
                         .subscriptions
                         .get(&username)
-                        .map_or(false, |s| s.contains(&room));
+                        .is_some_and(|s| s.contains(&room));
                     if in_room {
                         // Envia para todos os membros daquela sala
                         if let Some(members) = self.state.rooms.get(&room) {
@@ -408,10 +256,7 @@ impl ChatCore {
                                 let member_name = member.key();
                                 if let Some(tx) = self.state.get_client_tx(member_name) {
                                     if let Err(e) = tx.try_send(msg.clone()) {
-                                        match e {
-                                            TrySendError::Full(_) => metrics::inc_send_full(),
-                                            _ => {}
-                                        }
+                                        if let TrySendError::Full(_) = e { metrics::inc_send_full() }
                                         error!(to=%member_name, error=%e, "Falha ao enviar RoomText");
                                     }
                                 }
@@ -622,7 +467,7 @@ impl ChatCore {
             let from_clone = from.clone();
             let to_clone = to.clone();
             let content_clone = content.clone();
-            let timestamp_clone = timestamp.clone();
+            let timestamp_clone = timestamp;
             let message_id_clone = message_id.clone();
             let delivered = is_recipient_online;
 
@@ -693,10 +538,7 @@ impl ChatCore {
             } else {
                 // No runtime (tests), fallback para try_send síncrono
                 if let Err(e) = target_tx.try_send(msg) {
-                    match e {
-                        TrySendError::Full(_) => metrics::inc_send_full(),
-                        _ => {}
-                    }
+                    if let TrySendError::Full(_) = e { metrics::inc_send_full() }
                     error!(to=%to_clone, error=%e, "Falha ao enviar DM (fallback try_send)");
                     if let Some(sender_tx) = sender_tx_opt {
                         self.send_reliable(
@@ -704,17 +546,15 @@ impl ChatCore {
                             ChatMessage::Error(format!("Falha ao entregar DM para {}.", to_clone)),
                         );
                     }
-                } else {
-                    if let Some(sender_tx) = sender_tx_opt {
-                        self.send_reliable(
-                            sender_tx,
-                            ChatMessage::Ack {
-                                kind: AckKind::Delivered,
-                                info: format!("DM para {} entregue.", to_clone),
-                                message_id: message_id_clone.clone(),
-                            },
-                        );
-                    }
+                } else if let Some(sender_tx) = sender_tx_opt {
+                    self.send_reliable(
+                        sender_tx,
+                        ChatMessage::Ack {
+                            kind: AckKind::Delivered,
+                            info: format!("DM para {} entregue.", to_clone),
+                            message_id: message_id_clone.clone(),
+                        },
+                    );
                 }
             }
         } else {
@@ -823,7 +663,7 @@ impl ChatCore {
                     .state
                     .subscriptions
                     .get(&username)
-                    .map_or(false, |s| s.contains(&room));
+                    .is_some_and(|s| s.contains(&room));
                 if in_room {
                     if let Some(members) = self.state.rooms.get(&room) {
                         let msg = ChatMessage::RoomText {
@@ -836,29 +676,24 @@ impl ChatCore {
                             let member_name = member.key();
                             if let Some(tx) = self.state.get_client_tx(member_name) {
                                 if let Err(e) = tx.try_send(msg.clone()) {
-                                    match e {
-                                        TrySendError::Full(_) => metrics::inc_send_full(),
-                                        _ => {}
-                                    }
+                                    if let TrySendError::Full(_) = e { metrics::inc_send_full() }
                                     error!(to=%member_name, error=%e, "Falha ao enviar RoomText");
                                 }
                             }
                         }
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Ack {
-                                kind: AckKind::Failed,
-                                info: format!(
-                                    "Você precisa entrar na sala {} para enviar mensagens.",
-                                    room
-                                ),
-                                message_id: None,
-                            },
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Ack {
+                            kind: AckKind::Failed,
+                            info: format!(
+                                "Você precisa entrar na sala {} para enviar mensagens.",
+                                room
+                            ),
+                            message_id: None,
+                        },
+                    );
                 }
             }
             ChatAction::Private {
@@ -1174,13 +1009,11 @@ impl ChatCore {
                             error!(error=%e, "Erro ao verificar admin");
                         }
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1265,13 +1098,11 @@ impl ChatCore {
                         }
                         Err(e) => error!(error=%e, "Erro ao verificar admin"),
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1336,13 +1167,11 @@ impl ChatCore {
                         }
                         Err(e) => error!(error=%e, "Erro ao verificar admin"),
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1391,13 +1220,11 @@ impl ChatCore {
                         }
                         Err(e) => error!(error=%e, "Erro ao verificar admin"),
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1462,13 +1289,11 @@ impl ChatCore {
                         }
                         Err(e) => error!(error=%e, "Erro ao verificar admin"),
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1517,13 +1342,11 @@ impl ChatCore {
                         }
                         Err(e) => error!(error=%e, "Erro ao verificar admin"),
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1560,13 +1383,11 @@ impl ChatCore {
                             }
                         }
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1643,13 +1464,11 @@ impl ChatCore {
                         }
                         Err(e) => error!(error=%e, "Erro ao verificar admin"),
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1685,13 +1504,11 @@ impl ChatCore {
                             }
                         }
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
 
@@ -1751,13 +1568,11 @@ impl ChatCore {
                             }
                         }
                     }
-                } else {
-                    if let Some(tx) = self.state.get_client_tx(&username) {
-                        self.send_reliable(
-                            tx,
-                            ChatMessage::Error("Banco de dados não disponível".to_string()),
-                        );
-                    }
+                } else if let Some(tx) = self.state.get_client_tx(&username) {
+                    self.send_reliable(
+                        tx,
+                        ChatMessage::Error("Banco de dados não disponível".to_string()),
+                    );
                 }
             }
         }
@@ -2041,7 +1856,7 @@ impl ChatCore {
             let db_clone = db.clone();
             let from_clone = from.clone();
             let content_clone = content.clone();
-            let timestamp_clone = timestamp.clone();
+            let timestamp_clone = timestamp;
 
             tokio::task::spawn_blocking(move || {
                 if let Err(e) = db_clone.insert_message(
@@ -2067,10 +1882,7 @@ impl ChatCore {
             let username = entry.key();
             let tx = entry.value().1.clone();
             if let Err(e) = tx.try_send(msg.clone()) {
-                match e {
-                    TrySendError::Full(_) => metrics::inc_send_full(),
-                    _ => {}
-                }
+                if let TrySendError::Full(_) = e { metrics::inc_send_full() }
                 error!(to=%username, error=%e, "Falha ao enviar broadcast");
             }
         }
@@ -2084,6 +1896,155 @@ impl ChatCore {
             }
         } else {
             warn!(to=%to, "Destinatário não encontrado");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::server::state::ChatState;
+    use chrono::Utc;
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+
+    #[test]
+    fn test_send_private_and_ack() {
+        let state = Arc::new(ChatState::new());
+        let (tx_a, mut rx_a) = mpsc::channel(1000);
+        let (tx_b, mut rx_b) = mpsc::channel(1000);
+
+        let addr_a: SocketAddr = "127.0.0.1:10000".parse().unwrap();
+        let addr_b: SocketAddr = "127.0.0.1:10001".parse().unwrap();
+
+        state.add_client(addr_a, "alice".to_string(), tx_a);
+        state.add_client(addr_b, "bob".to_string(), tx_b);
+
+        let core = ChatCore::new(state.clone());
+
+        core.send_private_message(
+            "alice".into(),
+            "bob".into(),
+            "hello".into(),
+            Utc::now(),
+            Some("mid-1".into()),
+        );
+
+        // bob should receive Private
+        match rx_b.try_recv() {
+            Ok(msg) => match msg {
+                ChatMessage::Private {
+                    from,
+                    to,
+                    content,
+                    message_id,
+                    ..
+                } => {
+                    assert_eq!(from, "alice");
+                    assert_eq!(to, "bob");
+                    assert_eq!(content, "hello");
+                    assert_eq!(message_id, Some("mid-1".into()));
+                }
+                _ => panic!("expected Private"),
+            },
+            Err(e) => panic!("bob did not receive private: {:?}", e),
+        }
+
+        // alice should receive Ack
+        match rx_a.try_recv() {
+            Ok(msg) => match msg {
+                ChatMessage::Ack {
+                    kind, message_id, ..
+                } => {
+                    assert_eq!(kind, AckKind::Delivered);
+                    assert_eq!(message_id, Some("mid-1".into()));
+                }
+                _ => panic!("expected Ack"),
+            },
+            Err(e) => panic!("alice did not receive ack: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_dedup() {
+        let state = Arc::new(ChatState::new());
+        assert!(!state.check_and_mark_message_id("dup-1"));
+        assert!(state.check_and_mark_message_id("dup-1"));
+    }
+
+    #[test]
+    fn test_roomtext_barrier_and_broadcast() {
+        let state = Arc::new(ChatState::new());
+        state.init_fixed_rooms();
+
+        let (tx_a, mut rx_a) = mpsc::channel(1000);
+        let (tx_b, mut rx_b) = mpsc::channel(1000);
+
+        let addr_a: SocketAddr = "127.0.0.1:11000".parse().unwrap();
+        let addr_b: SocketAddr = "127.0.0.1:11001".parse().unwrap();
+
+        state.add_client(addr_a, "alice".to_string(), tx_a);
+        state.add_client(addr_b, "bob".to_string(), tx_b);
+
+        let core = ChatCore::new(state.clone());
+
+        // bob joins #rust, alice does not
+        state.join_room("bob", "#rust");
+
+        // alice attempts to send RoomText to #rust (should be denied)
+        core.handle_message(
+            ChatMessage::RoomText {
+                from: "alice".into(),
+                room: "#rust".into(),
+                content: "hi".into(),
+                timestamp: Utc::now(),
+            },
+            addr_a,
+        );
+
+        // alice should receive Ack::Failed
+        match rx_a.try_recv() {
+            Ok(msg) => match msg {
+                ChatMessage::Ack { kind, .. } => {
+                    assert_eq!(kind, AckKind::Failed);
+                }
+                _ => panic!("expected Ack::Failed"),
+            },
+            Err(e) => panic!("alice did not receive ack: {:?}", e),
+        }
+
+        // bob should NOT receive the message
+        if rx_b.try_recv().is_ok() { panic!("bob should not receive RoomText") }
+
+        // Now alice joins and sends again
+        state.join_room("alice", "#rust");
+        core.handle_message(
+            ChatMessage::RoomText {
+                from: "alice".into(),
+                room: "#rust".into(),
+                content: "hi2".into(),
+                timestamp: Utc::now(),
+            },
+            addr_a,
+        );
+
+        // bob should receive the RoomText
+        match rx_b.try_recv() {
+            Ok(msg) => match msg {
+                ChatMessage::RoomText {
+                    from,
+                    room,
+                    content,
+                    ..
+                } => {
+                    assert_eq!(from, "alice");
+                    assert_eq!(room, "#rust");
+                    assert_eq!(content, "hi2");
+                }
+                _ => panic!("expected RoomText"),
+            },
+            Err(e) => panic!("bob did not receive roomtext: {:?}", e),
         }
     }
 }

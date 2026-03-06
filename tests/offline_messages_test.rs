@@ -1,4 +1,3 @@
-use serde_json;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -29,17 +28,12 @@ async fn start_test_server_with_db() -> (tokio::task::JoinHandle<()>, String, St
     let core = Arc::new(ChatCore::new_with_auth_and_db(state.clone(), auth, db));
 
     let handle = tokio::spawn(async move {
-        loop {
-            match listener.accept().await {
-                Ok((socket, addr)) => {
-                    let core_handler = core.clone();
-                    tokio::spawn(async move {
-                        chat_serve::client::handle::handle_connection(socket, addr, core_handler)
-                            .await;
-                    });
-                }
-                Err(_) => break,
-            }
+        while let Ok((socket, addr)) = listener.accept().await {
+            let core_handler = core.clone();
+            tokio::spawn(async move {
+                chat_serve::client::handle::handle_connection(socket, addr, core_handler)
+                    .await;
+            });
         }
     });
 
@@ -121,8 +115,8 @@ async fn test_offline_message_delivery() {
     .await;
 
     // Aguardar confirmação de Bob e desconectar
-    while let Some(_) = read_msg(&mut reader_bob_reg).await {
-        break;
+    if read_msg(&mut reader_bob_reg).await.is_some() {
+        // Confirmação recebida
     }
     drop(reader_bob_reg);
     drop(writer_bob_reg);
@@ -182,13 +176,8 @@ async fn test_offline_message_delivery() {
     // Bob deve receber as 2 mensagens offline
     let mut received_messages = Vec::new();
     for _ in 0..5 {
-        if let Some(msg) = read_msg(&mut reader_bob).await {
-            match msg {
-                ChatMessage::Private { content, .. } => {
-                    received_messages.push(content);
-                }
-                _ => {}
-            }
+        if let Some(ChatMessage::Private { content, .. }) = read_msg(&mut reader_bob).await {
+            received_messages.push(content);
         }
         if received_messages.len() >= 2 {
             break;

@@ -13,10 +13,8 @@ use chat_serve::ChatMessage; // Import via re-export from the library root
 use chrono::{Local, Utc};
 use colored::Colorize;
 use rpassword::read_password;
-use rustls_pki_types;
 use std::fs;
 use tracing::{debug, error, info, warn};
-use tracing_subscriber;
 use uuid::Uuid;
 
 #[tokio::main]
@@ -123,7 +121,8 @@ where
     let mut user_line = String::new();
 
     // pending: message_id -> (ChatMessage, last_sent_instant, attempts)
-    let pending: Arc<AsyncMutex<HashMap<String, (ChatMessage, Instant, u8)>>> =
+    type PendingMessages = HashMap<String, (ChatMessage, Instant, u8)>;
+    let pending: Arc<AsyncMutex<PendingMessages>> =
         Arc::new(AsyncMutex::new(HashMap::new()));
     // Histórico local das últimas mensagens (para ordenar por timestamp)
     let history: Arc<AsyncMutex<Vec<ChatMessage>>> = Arc::new(AsyncMutex::new(Vec::new()));

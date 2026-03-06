@@ -313,6 +313,7 @@ impl Database {
     // ============ OPERAÇÕES DE MENSAGENS ============
 
     /// Insere uma mensagem no banco
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_message(
         &self,
         from_user: &str,
@@ -336,6 +337,7 @@ impl Database {
     }
 
     /// Insere uma mensagem no banco com status de entrega
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_message_with_delivery(
         &self,
         from_user: &str,

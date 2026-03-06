@@ -23,6 +23,12 @@ pub struct ChatState {
     rate_counters: DashMap<String, (Instant, u32)>,
 }
 
+impl Default for ChatState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChatState {
     pub fn new() -> Self {
         Self {
@@ -43,7 +49,7 @@ impl ChatState {
     // Aqui também pode ser chamado após `new()` se desejado.
     pub fn init_fixed_rooms(&self) {
         for r in Self::fixed_rooms() {
-            self.rooms.entry(r.to_string()).or_insert_with(DashSet::new);
+            self.rooms.entry(r.to_string()).or_default();
         }
     }
 
@@ -170,14 +176,14 @@ impl ChatState {
         let entry = self
             .rooms
             .entry(room.to_string())
-            .or_insert_with(DashSet::new);
+            .or_default();
         entry.insert(username.to_string());
 
         // Adicionar a sala nas inscrições do usuário
         let user_entry = self
             .subscriptions
             .entry(username.to_string())
-            .or_insert_with(DashSet::new);
+            .or_default();
         user_entry.insert(room.to_string());
     }
 

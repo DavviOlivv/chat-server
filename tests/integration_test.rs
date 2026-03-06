@@ -1,5 +1,4 @@
 // Testes de integração end-to-end com servidor real
-use serde_json;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -21,17 +20,12 @@ async fn start_test_server() -> (tokio::task::JoinHandle<()>, String) {
     let core = Arc::new(ChatCore::new(state.clone()));
 
     let handle = tokio::spawn(async move {
-        loop {
-            match listener.accept().await {
-                Ok((socket, addr)) => {
-                    let core_handler = core.clone();
-                    tokio::spawn(async move {
-                        chat_serve::client::handle::handle_connection(socket, addr, core_handler)
-                            .await;
-                    });
-                }
-                Err(_) => break,
-            }
+        while let Ok((socket, addr)) = listener.accept().await {
+            let core_handler = core.clone();
+            tokio::spawn(async move {
+                chat_serve::client::handle::handle_connection(socket, addr, core_handler)
+                    .await;
+            });
         }
     });
 
@@ -281,7 +275,7 @@ async fn test_list_users() {
     match response.unwrap() {
         ChatMessage::ListResponse { users } => {
             assert!(
-                users.len() >= 1,
+                !users.is_empty(),
                 "Lista deveria ter pelo menos 1 usuário, tem {}",
                 users.len()
             );
@@ -412,13 +406,11 @@ async fn test_rate_limiting() {
         loop {
             let mut line = String::new();
             if reader1.read_line(&mut line).await.is_ok() && !line.is_empty() {
-                if let Ok(msg) = serde_json::from_str::<ChatMessage>(&line) {
-                    if let ChatMessage::Ack { kind, info, .. } = msg {
-                        if matches!(kind, AckKind::Failed)
-                            && info.contains("Limite de mensagens excedido")
-                        {
-                            return true;
-                        }
+                if let Ok(ChatMessage::Ack { kind, info, .. }) = serde_json::from_str::<ChatMessage>(&line) {
+                    if matches!(kind, AckKind::Failed)
+                        && info.contains("Limite de mensagens excedido")
+                    {
+                        return true;
                     }
                 }
             }

@@ -12,7 +12,6 @@ use chat_serve::server::listener;
 use chat_serve::{AckKind, ChatAction, ChatMessage};
 use chrono::{Local, Utc};
 use rpassword::read_password;
-use rustls_pki_types;
 use serde::Deserialize;
 use tracing::{error, info};
 use uuid::Uuid;
@@ -643,9 +642,9 @@ where
                                             );
                                             None
                                         }
-                                    } else if input.starts_with("/join ") {
+                                    } else if let Some(room_input) = input.strip_prefix("/join ") {
                                         // Join room: /join <room>
-                                        let room = input[6..].trim().to_string();
+                                        let room = room_input.trim().to_string();
                                         if !room.is_empty() {
                                             app.current_room = Some(room.clone());
                                             Some(ChatMessage::Authenticated {

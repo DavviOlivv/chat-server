@@ -41,9 +41,8 @@ jobs:
       - uses: actions/checkout@v3
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: clippy
       
       - name: Cache cargo
@@ -65,9 +64,8 @@ jobs:
       - uses: actions/checkout@v3
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: rustfmt
       
       - name: Check formatting
@@ -84,9 +82,7 @@ jobs:
       - uses: actions/checkout@v3
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
       
       - name: Cache cargo
         uses: actions/cache@v3

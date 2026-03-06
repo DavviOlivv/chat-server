@@ -1,41 +1,65 @@
+use rustls_pemfile::{certs, pkcs8_private_keys};
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::sync::Arc;
-use rustls_pemfile::{certs, pkcs8_private_keys};
-use tokio_rustls::rustls::{self, ServerConfig, ClientConfig, RootCertStore};
+use tokio_rustls::rustls::{self, ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 /// Carrega certificados e chave privada, retorna um TlsAcceptor configurado.
-/// 
+///
 /// # Argumentos
 /// - `cert_path`: caminho para o arquivo do certificado (ex: "certs/cert.pem")
 /// - `key_path`: caminho para a chave privada (ex: "certs/key.pem")
-/// 
+///
 /// # Retorno
 /// Um `TlsAcceptor` pronto para envolver conexões TCP aceitas.
 pub fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor> {
     // Lê os certificados
-    let cert_file = File::open(cert_path)
-        .map_err(|e| io::Error::new(io::ErrorKind::NotFound, format!("Certificado não encontrado em {}: {}", cert_path, e)))?;
+    let cert_file = File::open(cert_path).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Certificado não encontrado em {}: {}", cert_path, e),
+        )
+    })?;
     let mut cert_reader = BufReader::new(cert_file);
     let cert_chain: Vec<rustls::pki_types::CertificateDer> = certs(&mut cert_reader)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Erro ao ler certificados: {}", e)))?;
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Erro ao ler certificados: {}", e),
+            )
+        })?;
 
     if cert_chain.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "Nenhum certificado válido encontrado"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Nenhum certificado válido encontrado",
+        ));
     }
 
     // Lê a chave privada
-    let key_file = File::open(key_path)
-        .map_err(|e| io::Error::new(io::ErrorKind::NotFound, format!("Chave privada não encontrada em {}: {}", key_path, e)))?;
+    let key_file = File::open(key_path).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Chave privada não encontrada em {}: {}", key_path, e),
+        )
+    })?;
     let mut key_reader = BufReader::new(key_file);
     let mut keys = pkcs8_private_keys(&mut key_reader)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Erro ao ler chave privada: {}", e)))?;
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Erro ao ler chave privada: {}", e),
+            )
+        })?;
 
     if keys.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "Nenhuma chave privada válida encontrada"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Nenhuma chave privada válida encontrada",
+        ));
     }
 
     let private_key = rustls::pki_types::PrivateKeyDer::Pkcs8(keys.remove(0));
@@ -44,17 +68,22 @@ pub fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAccep
     let config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(cert_chain, private_key)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Erro ao configurar TLS: {}", e)))?;
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Erro ao configurar TLS: {}", e),
+            )
+        })?;
 
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
 /// Carrega um TlsConnector para o cliente, opcionalmente com validação de certificados.
-/// 
+///
 /// # Argumentos
 /// - `insecure`: se true, aceita certificados autoassinados sem validação
 /// - `ca_cert_path`: caminho opcional para CA personalizada (ex: "certs/cert.pem")
-/// 
+///
 /// # Retorno
 /// Um `TlsConnector` para conectar ao servidor TLS.
 pub fn load_tls_connector(insecure: bool, ca_cert_path: Option<&str>) -> io::Result<TlsConnector> {
@@ -67,22 +96,32 @@ pub fn load_tls_connector(insecure: bool, ca_cert_path: Option<&str>) -> io::Res
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(NoVerifier))
             .with_no_client_auth();
-        
+
         return Ok(TlsConnector::from(Arc::new(config)));
     }
 
     // Modo seguro: carrega CA do sistema ou do arquivo especificado
     if let Some(ca_path) = ca_cert_path {
-        let ca_file = File::open(ca_path)
-            .map_err(|e| io::Error::new(io::ErrorKind::NotFound, format!("Certificado CA não encontrado em {}: {}", ca_path, e)))?;
+        let ca_file = File::open(ca_path).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Certificado CA não encontrado em {}: {}", ca_path, e),
+            )
+        })?;
         let mut ca_reader = BufReader::new(ca_file);
         let ca_certs: Vec<rustls::pki_types::CertificateDer> = certs(&mut ca_reader)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Erro ao ler CA: {}", e)))?;
+            .map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("Erro ao ler CA: {}", e))
+            })?;
 
         for cert in ca_certs {
-            root_store.add(cert)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Erro ao adicionar CA: {}", e)))?;
+            root_store.add(cert).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Erro ao adicionar CA: {}", e),
+                )
+            })?;
         }
     } else {
         // Usa certificados do sistema
@@ -138,5 +177,3 @@ impl rustls::client::danger::ServerCertVerifier for NoVerifier {
         ]
     }
 }
-
-

@@ -1,12 +1,12 @@
+use futures_util::{SinkExt, StreamExt};
 use std::net::SocketAddr;
-use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use futures_util::{StreamExt, SinkExt};
-use tracing::{info, error, warn};
+use tracing::{error, info, warn};
 
 /// WebSocket Gateway - Faz bridge entre clientes WebSocket e servidor TCP
-/// 
+///
 /// Arquitetura:
 /// WebSocket Client → WS Gateway (8081) → TCP Server (8080)
 ///                         ↕
@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Endereço do gateway WebSocket
     let ws_addr: SocketAddr = "127.0.0.1:8081".parse()?;
     let listener = TcpListener::bind(&ws_addr).await?;
-    
+
     info!("🌐 WebSocket Gateway rodando em ws://{}", ws_addr);
     info!("📡 Fazendo bridge para servidor TCP em 127.0.0.1:8080");
     info!("💡 Clientes web podem conectar via WebSocket");
@@ -68,8 +68,12 @@ async fn handle_connection(
             match msg {
                 Ok(Message::Text(text)) => {
                     // Cliente web envia JSON como texto WebSocket
-                    info!("WS→TCP [{}]: {}", peer_addr, text.chars().take(100).collect::<String>());
-                    
+                    info!(
+                        "WS→TCP [{}]: {}",
+                        peer_addr,
+                        text.chars().take(100).collect::<String>()
+                    );
+
                     // Encaminhar para servidor TCP (adiciona newline pois servidor espera linhas)
                     if let Err(e) = tcp_write.write_all(text.as_bytes()).await {
                         error!("Erro ao escrever no TCP: {}", e);
@@ -92,7 +96,10 @@ async fn handle_connection(
                     // Resposta a ping
                 }
                 Ok(Message::Binary(_)) => {
-                    warn!("Mensagem binária ignorada de {} (esperado texto JSON)", peer_addr);
+                    warn!(
+                        "Mensagem binária ignorada de {} (esperado texto JSON)",
+                        peer_addr
+                    );
                 }
                 Err(e) => {
                     error!("Erro ao ler WebSocket de {}: {}", peer_addr, e);
@@ -117,8 +124,12 @@ async fn handle_connection(
                 Ok(_) => {
                     let trimmed = line.trim();
                     if !trimmed.is_empty() {
-                        info!("TCP→WS [{}]: {}", peer_addr, trimmed.chars().take(100).collect::<String>());
-                        
+                        info!(
+                            "TCP→WS [{}]: {}",
+                            peer_addr,
+                            trimmed.chars().take(100).collect::<String>()
+                        );
+
                         // Encaminhar para cliente WebSocket como texto
                         if let Err(e) = ws_write.send(Message::Text(trimmed.to_string())).await {
                             error!("Erro ao escrever no WebSocket: {}", e);
@@ -133,14 +144,14 @@ async fn handle_connection(
             }
         }
         info!("Task TCP→WS encerrada para {}", peer_addr);
-        
+
         // Fechar WebSocket graciosamente
         let _ = ws_write.close().await;
     });
 
     // Aguardar ambas as tasks
     let _ = tokio::try_join!(ws_to_tcp, tcp_to_ws);
-    
+
     info!("Conexão {} totalmente encerrada", peer_addr);
     Ok(())
 }

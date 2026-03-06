@@ -1,13 +1,13 @@
+use chat_serve::client;
+use chat_serve::server::auth::AuthManager;
+use chat_serve::server::core::ChatCore;
+use chat_serve::server::database::Database;
+use chat_serve::server::listener;
+use chat_serve::server::state::ChatState;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal;
-use chat_serve::server::state::ChatState;
-use chat_serve::server::core::ChatCore;
-use chat_serve::server::auth::AuthManager;
-use chat_serve::server::database::Database;
-use chat_serve::server::listener;
-use chat_serve::client;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 use tracing_subscriber;
 
 #[tokio::main]
@@ -18,7 +18,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Se a variável de ambiente `LOG_JSON` estiver presente (1/true/yes),
     // usamos saída em JSON para compatibilidade com pipelines (ELK/Loki).
     let env_filter = tracing_subscriber::EnvFilter::from_default_env();
-    let log_json = std::env::var("LOG_JSON").map(|v| matches!(v.as_str(), "1" | "true" | "yes")).unwrap_or(false);
+    let log_json = std::env::var("LOG_JSON")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false);
 
     if log_json {
         tracing_subscriber::fmt()
@@ -26,9 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_env_filter(env_filter)
             .init();
     } else {
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
-            .init();
+        tracing_subscriber::fmt().with_env_filter(env_filter).init();
     }
 
     let state = Arc::new(ChatState::new());
@@ -41,8 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auth = Arc::new(AuthManager::new(&users_file));
 
     // Inicializa o Database (usa o mesmo caminho base do AuthManager)
-    let db_path = std::env::var("DB_PATH")
-        .unwrap_or_else(|_| users_file.replace(".json", ".db"));
+    let db_path = std::env::var("DB_PATH").unwrap_or_else(|_| users_file.replace(".json", ".db"));
     let db = Arc::new(Database::new(&db_path).expect("Falha ao inicializar banco de dados"));
 
     // Task de limpeza automática de mensagens antigas
@@ -52,17 +51,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(90);
-        
+
         let pending_ttl_days: Option<u64> = std::env::var("PENDING_MESSAGE_TTL_DAYS")
             .ok()
             .and_then(|v| v.parse().ok());
-        
+
         if let Some(ttl) = pending_ttl_days {
             info!(retention_days=%retention_days, pending_ttl_days=%ttl, "🗑️  Limpeza automática de mensagens configurada (com TTL para pendentes)");
         } else {
             info!(retention_days=%retention_days, "🗑️  Limpeza automática de mensagens configurada");
         }
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(24 * 3600)); // 24 horas
             loop {
@@ -70,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let db_task = db_clone.clone();
                 let days = retention_days;
                 let pending_ttl = pending_ttl_days;
-                
+
                 tokio::task::spawn_blocking(move || {
                     // Limpeza geral de mensagens antigas
                     match db_task.delete_messages_older_than(days as i64) {
@@ -83,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             error!(error=%e, days=%days, "Falha ao limpar mensagens antigas");
                         }
                     }
-                    
+
                     // Limpeza adicional de mensagens pendentes (TTL)
                     if let Some(ttl) = pending_ttl {
                         match db_task.delete_pending_messages_older_than(ttl as i64) {
@@ -118,7 +117,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Start metrics server in background (Prometheus scrape endpoint)
-    let metrics_bind = std::env::var("METRICS_BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:9090".to_string());
+    let metrics_bind =
+        std::env::var("METRICS_BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:9090".to_string());
     tokio::spawn(async move {
         if let Err(e) = chat_serve::utils::metrics_server::run_metrics_server(&metrics_bind).await {
             tracing::error!(error=%e, "metrics server failed");
@@ -126,11 +126,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // 3. TLS: Carrega certificados se TLS_ENABLED=true
-    let tls_enabled = std::env::var("TLS_ENABLED").map(|v| v == "true" || v == "1").unwrap_or(false);
+    let tls_enabled = std::env::var("TLS_ENABLED")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
     let tls_acceptor = if tls_enabled {
         let cert_path = std::env::var("TLS_CERT").unwrap_or_else(|_| "certs/cert.pem".to_string());
         let key_path = std::env::var("TLS_KEY").unwrap_or_else(|_| "certs/key.pem".to_string());
-        
+
         match listener::load_tls_acceptor(&cert_path, &key_path) {
             Ok(acceptor) => {
                 info!(cert=%cert_path, key=%key_path, "🔒 TLS habilitado");
@@ -227,4 +229,3 @@ async fn shutdown_signal() {
         _ = terminate => {},
     }
 }
-

@@ -41,9 +41,7 @@ struct ErrorResponse {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Inicializa logging
     let env_filter = tracing_subscriber::EnvFilter::from_default_env();
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Configurações
     let db_path = std::env::var("DB_PATH").unwrap_or_else(|_| "users.db".to_string());

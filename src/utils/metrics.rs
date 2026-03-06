@@ -1,38 +1,67 @@
 use once_cell::sync::Lazy;
-use prometheus::{IntCounter, IntGauge, Histogram, HistogramOpts, register_int_counter, register_int_gauge, register_histogram};
+use prometheus::{
+    register_histogram, register_int_counter, register_int_gauge, Histogram, HistogramOpts,
+    IntCounter, IntGauge,
+};
 
 // Channel fullness metric
 pub static SEND_FULL_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_send_full_total", "Number of failed try_send due to full channel").expect("register counter")
+    register_int_counter!(
+        "chat_send_full_total",
+        "Number of failed try_send due to full channel"
+    )
+    .expect("register counter")
 });
 
 // Message counters
 pub static MESSAGES_SENT_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_messages_sent_total", "Total messages sent (room + private)").expect("register counter")
+    register_int_counter!(
+        "chat_messages_sent_total",
+        "Total messages sent (room + private)"
+    )
+    .expect("register counter")
 });
 
 pub static PRIVATE_MESSAGES_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_private_messages_total", "Total private messages sent").expect("register counter")
+    register_int_counter!("chat_private_messages_total", "Total private messages sent")
+        .expect("register counter")
 });
 
 pub static ROOM_MESSAGES_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_room_messages_total", "Total room messages sent").expect("register counter")
+    register_int_counter!("chat_room_messages_total", "Total room messages sent")
+        .expect("register counter")
 });
 
 pub static MESSAGES_DELIVERED_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_messages_delivered_total", "Messages delivered immediately (recipient online)").expect("register counter")
+    register_int_counter!(
+        "chat_messages_delivered_total",
+        "Messages delivered immediately (recipient online)"
+    )
+    .expect("register counter")
 });
 
 pub static MESSAGES_QUEUED_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_messages_queued_total", "Messages queued for offline delivery").expect("register counter")
+    register_int_counter!(
+        "chat_messages_queued_total",
+        "Messages queued for offline delivery"
+    )
+    .expect("register counter")
 });
 
 pub static OFFLINE_MESSAGES_DELIVERED_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_offline_messages_delivered_total", "Offline messages delivered on login").expect("register counter")
+    register_int_counter!(
+        "chat_offline_messages_delivered_total",
+        "Offline messages delivered on login"
+    )
+    .expect("register counter")
 });
 
 pub static MESSAGE_QUEUE_FULL_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_message_queue_full_total", "Messages rejected due to full recipient queue").expect("register counter")
+    register_int_counter!(
+        "chat_message_queue_full_total",
+        "Messages rejected due to full recipient queue"
+    )
+    .expect("register counter")
 });
 
 // User activity counters
@@ -41,7 +70,8 @@ pub static LOGINS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
 });
 
 pub static REGISTRATIONS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("chat_registrations_total", "Total user registrations").expect("register counter")
+    register_int_counter!("chat_registrations_total", "Total user registrations")
+        .expect("register counter")
 });
 
 pub static LOGOUTS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
@@ -58,21 +88,29 @@ pub static ROOM_LEAVES_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
 
 // Gauges for current state
 pub static USERS_ONLINE: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!("chat_users_online", "Current number of users online").expect("register gauge")
+    register_int_gauge!("chat_users_online", "Current number of users online")
+        .expect("register gauge")
 });
 
 pub static PENDING_MESSAGES: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!("chat_pending_messages", "Current number of pending offline messages").expect("register gauge")
+    register_int_gauge!(
+        "chat_pending_messages",
+        "Current number of pending offline messages"
+    )
+    .expect("register gauge")
 });
 
 pub static ACTIVE_ROOMS: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!("chat_active_rooms", "Current number of active rooms").expect("register gauge")
+    register_int_gauge!("chat_active_rooms", "Current number of active rooms")
+        .expect("register gauge")
 });
 
 // Histogram for latency
 pub static MESSAGE_LATENCY: Lazy<Histogram> = Lazy::new(|| {
     let opts = HistogramOpts::new("chat_message_latency_seconds", "Message delivery latency")
-        .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]);
+        .buckets(vec![
+            0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0,
+        ]);
     register_histogram!(opts).expect("register histogram")
 });
 

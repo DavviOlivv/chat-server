@@ -1,10 +1,10 @@
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, AsyncRead, AsyncWrite, BufReader};
+use crate::model::message::ChatMessage;
+use crate::server::core::ChatCore;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use crate::server::core::ChatCore;
-use crate::model::message::ChatMessage;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
-use tracing::{info, debug, error};
+use tracing::{debug, error, info};
 
 pub async fn handle_connection<S>(stream: S, addr: SocketAddr, core: Arc<ChatCore>)
 where
@@ -95,7 +95,7 @@ where
             }
         }
     }
-    
+
     // Saindo do loop (desconexão), limpamos o rastro do usuário
     core.disconnect_user(addr);
     // Tenta resolver username para logs mais amigáveis

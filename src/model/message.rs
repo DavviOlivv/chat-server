@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum AckKind {
@@ -87,7 +87,6 @@ pub enum ChatAction {
     },
 
     // ===== Comandos de Administração =====
-    
     /// Expulsar usuário da sala/servidor
     AdminKick {
         target: String,
@@ -131,16 +130,14 @@ pub enum ChatAction {
     },
 
     // ===== Busca de Mensagens =====
-    
     /// Buscar mensagens usando Full-Text Search
     SearchMessages {
         query: String,
         limit: Option<usize>,
-        user_filter: Option<String>,  // Filtrar por usuário específico
+        user_filter: Option<String>, // Filtrar por usuário específico
     },
 
     // ===== Transferência de Arquivos =====
-    
     /// Notificar destinatário sobre arquivo enviado
     SendFile {
         from: String,
@@ -274,6 +271,6 @@ pub struct SearchResult {
     pub room: Option<String>,
     pub content: String,
     pub timestamp: String,
-    pub rank: f64,  // Relevância do resultado
-    pub snippet: String,  // Trecho destacado
+    pub rank: f64,       // Relevância do resultado
+    pub snippet: String, // Trecho destacado
 }

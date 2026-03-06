@@ -1,10 +1,10 @@
-use std::net::SocketAddr;
-use std::time::{Instant, Duration};
-use dashmap::{DashMap, DashSet};
-use tokio::sync::mpsc; // Canal para enviar mensagens para o cliente
 use crate::model::message::ChatMessage;
+use dashmap::{DashMap, DashSet};
+use std::net::SocketAddr;
+use std::time::{Duration, Instant};
+use tokio::sync::mpsc; // Canal para enviar mensagens para o cliente
 
-// Tipo auxiliar para facilitar a leitura: 
+// Tipo auxiliar para facilitar a leitura:
 // Um canal que envia ChatMessage para o socket do cliente
 type Tx = mpsc::Sender<ChatMessage>;
 
@@ -59,9 +59,14 @@ impl ChatState {
         }
 
         // Regex: ASCII alfanumérico + underscore + hífen
-        let valid_chars = username.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        let valid_chars = username
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
         if !valid_chars {
-            return Err("Username só pode conter letras ASCII, números, underscore (_) e hífen (-)".to_string());
+            return Err(
+                "Username só pode conter letras ASCII, números, underscore (_) e hífen (-)"
+                    .to_string(),
+            );
         }
 
         Ok(())
@@ -134,7 +139,7 @@ impl ChatState {
         // Primeiro, limpar as inscrições do usuário (Mapa B) e remover do membros (Mapa A)
         if let Some(subs_ref) = self.subscriptions.remove(username) {
             let subs_set = subs_ref.1; // DashSet<String>
-            // Colete salas para iterar
+                                       // Colete salas para iterar
             let rooms_vec: Vec<String> = subs_set.iter().map(|r| r.key().clone()).collect();
             for room in rooms_vec {
                 if let Some(room_entry) = self.rooms.get(&room) {
@@ -162,11 +167,17 @@ impl ChatState {
     /// Faz o usuário entrar na sala especificada. Cria a sala se necessário.
     pub fn join_room(&self, username: &str, room: &str) {
         // Garantir que a sala exista (criação dinâmica)
-        let entry = self.rooms.entry(room.to_string()).or_insert_with(DashSet::new);
+        let entry = self
+            .rooms
+            .entry(room.to_string())
+            .or_insert_with(DashSet::new);
         entry.insert(username.to_string());
 
         // Adicionar a sala nas inscrições do usuário
-        let user_entry = self.subscriptions.entry(username.to_string()).or_insert_with(DashSet::new);
+        let user_entry = self
+            .subscriptions
+            .entry(username.to_string())
+            .or_insert_with(DashSet::new);
         user_entry.insert(room.to_string());
     }
 
@@ -194,12 +205,17 @@ impl ChatState {
     // Busca o canal (`tx`) associado a um username para envio de DM
     pub fn get_client_tx(&self, target_username: &str) -> Option<Tx> {
         // Acesso direto por chave (mais eficiente)
-        self.clients.get(target_username).map(|r| r.value().1.clone())
+        self.clients
+            .get(target_username)
+            .map(|r| r.value().1.clone())
     }
 
     // Retorna a lista de usernames online
     pub fn list_usernames(&self) -> Vec<String> {
-        self.clients.iter().map(|entry| entry.key().clone()).collect()
+        self.clients
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     /// Retorna o `username` associado a um `SocketAddr`, se existir.
@@ -248,9 +264,9 @@ impl ChatState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
-    use std::net::SocketAddr;
     use crate::server::core::ChatCore;
+    use std::net::SocketAddr;
+    use tokio::sync::mpsc;
 
     #[test]
     fn test_validate_username() {
@@ -338,7 +354,11 @@ mod tests {
         let opt = state.get_client_tx("user1");
         assert!(opt.is_some());
         let tx = opt.unwrap();
-        let _ = tx.try_send(crate::model::message::ChatMessage::Text { from: "srv".into(), content: "hi".into(), timestamp: chrono::Utc::now() });
+        let _ = tx.try_send(crate::model::message::ChatMessage::Text {
+            from: "srv".into(),
+            content: "hi".into(),
+            timestamp: chrono::Utc::now(),
+        });
         match rx1.try_recv() {
             Ok(msg) => match msg {
                 crate::model::message::ChatMessage::Text { from, content, .. } => {
@@ -427,8 +447,14 @@ mod tests {
 
         let room = "#rust-heavy".to_string();
         // NOTE: defaults are small for CI; override via env for heavier local runs
-        let n: usize = std::env::var("STRESS_N").ok().and_then(|v| v.parse().ok()).unwrap_or(8usize);
-        let iterations: usize = std::env::var("STRESS_ITER").ok().and_then(|v| v.parse().ok()).unwrap_or(50usize);
+        let n: usize = std::env::var("STRESS_N")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8usize);
+        let iterations: usize = std::env::var("STRESS_ITER")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(50usize);
 
         // Prepare clients with addresses and channels
         let mut addrs = Vec::new();
@@ -489,7 +515,12 @@ mod tests {
             for k in 0..(iterations / 10) {
                 // pick a sender (user0)
                 let sender_addr = addrs_clone[0].0;
-                let msg = crate::model::message::ChatMessage::RoomText { from: "user0".into(), room: room_clone.clone(), content: format!("ping{}", k), timestamp: chrono::Utc::now() };
+                let msg = crate::model::message::ChatMessage::RoomText {
+                    from: "user0".into(),
+                    room: room_clone.clone(),
+                    content: format!("ping{}", k),
+                    timestamp: chrono::Utc::now(),
+                };
                 // use core to handle (it will validate membership)
                 core_b.handle_message(msg, sender_addr);
                 // small yield

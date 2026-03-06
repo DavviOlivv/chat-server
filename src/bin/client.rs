@@ -2,34 +2,36 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use tokio::io::{self, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader, AsyncRead, AsyncWrite};
 use tokio::sync::Mutex as AsyncMutex;
 
-use chat_serve::ChatMessage; // Import via re-export from the library root
-use chat_serve::ChatAction;
-use chat_serve::AckKind;
 use chat_serve::server::listener;
-use rustls_pki_types;
-use chrono::{Utc, Local};
-use tracing::{info, warn, error, debug};
-use tracing_subscriber;
-use rpassword::read_password;
-use uuid::Uuid;
-use std::fs;
+use chat_serve::AckKind;
+use chat_serve::ChatAction;
+use chat_serve::ChatMessage; // Import via re-export from the library root
+use chrono::{Local, Utc};
 use colored::Colorize;
+use rpassword::read_password;
+use rustls_pki_types;
+use std::fs;
+use tracing::{debug, error, info, warn};
+use tracing_subscriber;
+use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Inicializa logging (usar RUST_LOG=debug para ver todos os logs)
     let env_filter = tracing_subscriber::EnvFilter::from_default_env();
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Configurações TLS via env vars
-    let tls_enabled = std::env::var("TLS_ENABLED").map(|v| v == "true" || v == "1").unwrap_or(false);
-    let tls_insecure = std::env::var("TLS_INSECURE").map(|v| v == "true" || v == "1").unwrap_or(false);
+    let tls_enabled = std::env::var("TLS_ENABLED")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+    let tls_insecure = std::env::var("TLS_INSECURE")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
     let tls_ca_cert = std::env::var("TLS_CA_CERT").ok();
 
     let addr = std::env::var("SERVER_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
@@ -40,11 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("🔒 Conectando com TLS...");
         let connector = listener::load_tls_connector(tls_insecure, tls_ca_cert.as_deref())?;
         let tcp_stream = TcpStream::connect(&addr).await?;
-        
+
         let domain = rustls_pki_types::ServerName::try_from("localhost")
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid server name"))?
             .to_owned();
-        
+
         match connector.connect(domain, tcp_stream).await {
             Ok(tls_stream) => {
                 info!("✅ Conectado ao servidor TLS em {}", addr);
@@ -92,9 +94,9 @@ where
     let password = read_password().unwrap_or_default();
     let password = password.trim().to_string();
 
-    let login_msg = ChatMessage::Login { 
-        username: username.clone(), 
-        password: password.clone() 
+    let login_msg = ChatMessage::Login {
+        username: username.clone(),
+        password: password.clone(),
     };
     let login_json = match serde_json::to_string(&login_msg) {
         Ok(j) => j,
@@ -121,10 +123,11 @@ where
     let mut user_line = String::new();
 
     // pending: message_id -> (ChatMessage, last_sent_instant, attempts)
-    let pending: Arc<AsyncMutex<HashMap<String, (ChatMessage, Instant, u8)>>> = Arc::new(AsyncMutex::new(HashMap::new()));
+    let pending: Arc<AsyncMutex<HashMap<String, (ChatMessage, Instant, u8)>>> =
+        Arc::new(AsyncMutex::new(HashMap::new()));
     // Histórico local das últimas mensagens (para ordenar por timestamp)
     let history: Arc<AsyncMutex<Vec<ChatMessage>>> = Arc::new(AsyncMutex::new(Vec::new()));
-    
+
     // Typing indicator state
     let last_typing_sent: Arc<AsyncMutex<Option<Instant>>> = Arc::new(AsyncMutex::new(None));
     let is_typing: Arc<AsyncMutex<bool>> = Arc::new(AsyncMutex::new(false));
@@ -139,20 +142,36 @@ where
             match a.as_str() {
                 "--retry-interval" | "--retry-interval-secs" => {
                     if let Some(v) = iter.next() {
-                        if let Ok(n) = v.parse::<u64>() { retry_secs_arg = Some(n); }
+                        if let Ok(n) = v.parse::<u64>() {
+                            retry_secs_arg = Some(n);
+                        }
                     }
                 }
                 "--retry-attempts" | "--retry-max-attempts" => {
                     if let Some(v) = iter.next() {
-                        if let Ok(n) = v.parse::<u8>() { max_attempts_arg = Some(n); }
+                        if let Ok(n) = v.parse::<u8>() {
+                            max_attempts_arg = Some(n);
+                        }
                     }
                 }
                 _ => { /* ignore other args */ }
             }
         }
 
-        let retry_secs = retry_secs_arg.or_else(|| std::env::var("RETRY_INTERVAL_SECS").ok().and_then(|s| s.parse::<u64>().ok())).unwrap_or(3u64);
-        let max_attempts_cfg = max_attempts_arg.or_else(|| std::env::var("RETRY_MAX_ATTEMPTS").ok().and_then(|s| s.parse::<u8>().ok())).unwrap_or(3u8);
+        let retry_secs = retry_secs_arg
+            .or_else(|| {
+                std::env::var("RETRY_INTERVAL_SECS")
+                    .ok()
+                    .and_then(|s| s.parse::<u64>().ok())
+            })
+            .unwrap_or(3u64);
+        let max_attempts_cfg = max_attempts_arg
+            .or_else(|| {
+                std::env::var("RETRY_MAX_ATTEMPTS")
+                    .ok()
+                    .and_then(|s| s.parse::<u8>().ok())
+            })
+            .unwrap_or(3u8);
 
         info!(retry_interval_secs=%retry_secs, max_attempts=%max_attempts_cfg, "⚙️ Retry config");
 
@@ -219,13 +238,19 @@ where
                     if let Some((msg, attempts_now)) = maybe_pair {
                         // Notificação de retry para o usuário
                         match &msg {
-                                ChatMessage::Private { to, content, .. } => {
-                                    warn!("🔄 Reenviando ({}/{}) DM para {}: {}", attempts_now, max_attempts, to, content);
-                                    debug!(message_id=%id, to=%to, attempts=%attempts_now, "Tentativa de reenvio");
+                            ChatMessage::Private { to, content, .. } => {
+                                warn!(
+                                    "🔄 Reenviando ({}/{}) DM para {}: {}",
+                                    attempts_now, max_attempts, to, content
+                                );
+                                debug!(message_id=%id, to=%to, attempts=%attempts_now, "Tentativa de reenvio");
                             }
-                                _ => {
-                                    warn!("🔄 Reenviando ({}/{}) mensagem id={}", attempts_now, max_attempts, id);
-                                }
+                            _ => {
+                                warn!(
+                                    "🔄 Reenviando ({}/{}) mensagem id={}",
+                                    attempts_now, max_attempts, id
+                                );
+                            }
                         }
 
                         let json = match serde_json::to_string(&msg) {
@@ -257,11 +282,11 @@ where
             let debounce_duration = Duration::from_millis(500);
             loop {
                 tokio::time::sleep(Duration::from_millis(100)).await;
-                
+
                 let should_stop = {
                     let typing = is_typing.lock().await;
                     let last_sent = last_typing_sent.lock().await;
-                    
+
                     if *typing {
                         if let Some(last) = *last_sent {
                             Instant::now().duration_since(last) >= debounce_duration
@@ -272,7 +297,7 @@ where
                         false
                     }
                 };
-                
+
                 if should_stop {
                     // Enviar typing=false
                     let typing_msg = ChatMessage::Typing {
@@ -283,7 +308,7 @@ where
                         let mut w = writer.lock().await;
                         let _ = w.write_all(format!("{}\n", json).as_bytes()).await;
                     }
-                    
+
                     // Atualizar estado
                     let mut typing = is_typing.lock().await;
                     *typing = false;
@@ -327,7 +352,7 @@ where
                             let time_str = local_ts.format("%H:%M").to_string();
                             println!("[{}] {} {} {}", time_str.dimmed(), "🤫 [DM de".magenta(), from.magenta().bold(), "]:".magenta());
                             println!("{}", content.italic().white());
-                            
+
                             // Enviar read receipt se temos message_id e session_token
                             if let (Some(msg_id), Some(ref _token)) = (message_id, &session_token) {
                                 let receipt = ChatMessage::ReadReceipt {
@@ -419,41 +444,41 @@ where
                                     } else {
                                         msg.timestamp.clone()
                                     };
-                                    
+
                                     // Formatar baseado no tipo de mensagem
                                     match msg.message_type.as_str() {
                                         "private" => {
                                             let from = msg.from_user.cyan();
                                             let to = msg.to_user.as_ref().unwrap_or(&"?".to_string()).magenta();
-                                            println!("  [{}] {} -> {}: {}", 
-                                                timestamp_display.dimmed(), 
-                                                from, 
-                                                to, 
+                                            println!("  [{}] {} -> {}: {}",
+                                                timestamp_display.dimmed(),
+                                                from,
+                                                to,
                                                 msg.content
                                             );
                                         }
                                         "broadcast" => {
                                             let from = msg.from_user.green();
-                                            println!("  [{}] {} (broadcast): {}", 
-                                                timestamp_display.dimmed(), 
-                                                from, 
+                                            println!("  [{}] {} (broadcast): {}",
+                                                timestamp_display.dimmed(),
+                                                from,
                                                 msg.content
                                             );
                                         }
                                         "room" => {
                                             let from = msg.from_user.yellow();
                                             let room = msg.room.as_ref().unwrap_or(&"?".to_string()).blue();
-                                            println!("  [{}] {} em #{}: {}", 
-                                                timestamp_display.dimmed(), 
-                                                from, 
-                                                room, 
+                                            println!("  [{}] {} em #{}: {}",
+                                                timestamp_display.dimmed(),
+                                                from,
+                                                room,
                                                 msg.content
                                             );
                                         }
                                         _ => {
-                                            println!("  [{}] {}: {}", 
-                                                timestamp_display.dimmed(), 
-                                                msg.from_user, 
+                                            println!("  [{}] {}: {}",
+                                                timestamp_display.dimmed(),
+                                                msg.from_user,
                                                 msg.content
                                             );
                                         }
@@ -518,7 +543,7 @@ where
                         let mut last_sent = last_typing_sent.lock().await;
                         *last_sent = Some(Instant::now());
                     }
-                    
+
                     if content.starts_with("/msg ") {
                         // Comando privado: /msg <user> <message>
                         let parts: Vec<&str> = content.splitn(3, ' ').collect();
@@ -585,28 +610,28 @@ where
                             let parts: Vec<&str> = content.split_whitespace().collect();
                             let to_user = if parts.len() >= 2 { Some(parts[1].to_string()) } else { None };
                             let limit = if parts.len() >= 3 { parts[2].parse::<usize>().ok() } else { None };
-                            
+
                             let msg = if let Some(token) = &session_token {
-                                ChatMessage::Authenticated { 
-                                    token: token.clone(), 
-                                    action: Box::new(ChatAction::HistoryRequest { 
+                                ChatMessage::Authenticated {
+                                    token: token.clone(),
+                                    action: Box::new(ChatAction::HistoryRequest {
                                         from: username.clone(),
                                         to: to_user.clone(),
                                         limit,
-                                    }) 
+                                    })
                                 }
                             } else {
                                 // Sem sessão, não pode buscar histórico
                                 println!("{}", "❌ Você precisa estar autenticado para buscar histórico".red());
                                 continue;
                             };
-                            
+
                             let json = serde_json::to_string(&msg)?;
                             {
                                 let mut w = writer.lock().await;
                                 w.write_all(format!("{}\n", json).as_bytes()).await?;
                             }
-                            
+
                             if let Some(to) = to_user {
                                 println!("{} {} (limite: {})", "🔍 Buscando histórico com".cyan(), to.bold(), limit.unwrap_or(50));
                             } else {

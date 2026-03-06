@@ -101,7 +101,7 @@ jobs:
         run: cargo build --release --verbose
       
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: chat_server-${{ matrix.os }}
           path: |
@@ -125,7 +125,7 @@ jobs:
         run: |
           docker save chat_server:ci -o chat_server.tar
       - name: Upload image artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: chat_server-image
           path: chat_server.tar

@@ -135,7 +135,10 @@ impl AuthManager {
                     Ok(users_file) => {
                         let mut migrated = 0;
                         for record in users_file.users {
-                            if self.db.insert_user(&record.username, &record.password_hash).is_ok()
+                            if self
+                                .db
+                                .insert_user(&record.username, &record.password_hash)
+                                .is_ok()
                             {
                                 migrated += 1;
                             }

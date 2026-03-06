@@ -23,8 +23,7 @@ async fn start_test_server() -> (tokio::task::JoinHandle<()>, String) {
         while let Ok((socket, addr)) = listener.accept().await {
             let core_handler = core.clone();
             tokio::spawn(async move {
-                chat_serve::client::handle::handle_connection(socket, addr, core_handler)
-                    .await;
+                chat_serve::client::handle::handle_connection(socket, addr, core_handler).await;
             });
         }
     });
@@ -406,7 +405,9 @@ async fn test_rate_limiting() {
         loop {
             let mut line = String::new();
             if reader1.read_line(&mut line).await.is_ok() && !line.is_empty() {
-                if let Ok(ChatMessage::Ack { kind, info, .. }) = serde_json::from_str::<ChatMessage>(&line) {
+                if let Ok(ChatMessage::Ack { kind, info, .. }) =
+                    serde_json::from_str::<ChatMessage>(&line)
+                {
                     if matches!(kind, AckKind::Failed)
                         && info.contains("Limite de mensagens excedido")
                     {

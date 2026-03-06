@@ -173,17 +173,11 @@ impl ChatState {
     /// Faz o usuário entrar na sala especificada. Cria a sala se necessário.
     pub fn join_room(&self, username: &str, room: &str) {
         // Garantir que a sala exista (criação dinâmica)
-        let entry = self
-            .rooms
-            .entry(room.to_string())
-            .or_default();
+        let entry = self.rooms.entry(room.to_string()).or_default();
         entry.insert(username.to_string());
 
         // Adicionar a sala nas inscrições do usuário
-        let user_entry = self
-            .subscriptions
-            .entry(username.to_string())
-            .or_default();
+        let user_entry = self.subscriptions.entry(username.to_string()).or_default();
         user_entry.insert(room.to_string());
     }
 

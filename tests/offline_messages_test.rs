@@ -31,8 +31,7 @@ async fn start_test_server_with_db() -> (tokio::task::JoinHandle<()>, String, St
         while let Ok((socket, addr)) = listener.accept().await {
             let core_handler = core.clone();
             tokio::spawn(async move {
-                chat_serve::client::handle::handle_connection(socket, addr, core_handler)
-                    .await;
+                chat_serve::client::handle::handle_connection(socket, addr, core_handler).await;
             });
         }
     });

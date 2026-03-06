@@ -256,7 +256,9 @@ impl ChatCore {
                                 let member_name = member.key();
                                 if let Some(tx) = self.state.get_client_tx(member_name) {
                                     if let Err(e) = tx.try_send(msg.clone()) {
-                                        if let TrySendError::Full(_) = e { metrics::inc_send_full() }
+                                        if let TrySendError::Full(_) = e {
+                                            metrics::inc_send_full()
+                                        }
                                         error!(to=%member_name, error=%e, "Falha ao enviar RoomText");
                                     }
                                 }
@@ -538,7 +540,9 @@ impl ChatCore {
             } else {
                 // No runtime (tests), fallback para try_send síncrono
                 if let Err(e) = target_tx.try_send(msg) {
-                    if let TrySendError::Full(_) = e { metrics::inc_send_full() }
+                    if let TrySendError::Full(_) = e {
+                        metrics::inc_send_full()
+                    }
                     error!(to=%to_clone, error=%e, "Falha ao enviar DM (fallback try_send)");
                     if let Some(sender_tx) = sender_tx_opt {
                         self.send_reliable(
@@ -676,7 +680,9 @@ impl ChatCore {
                             let member_name = member.key();
                             if let Some(tx) = self.state.get_client_tx(member_name) {
                                 if let Err(e) = tx.try_send(msg.clone()) {
-                                    if let TrySendError::Full(_) = e { metrics::inc_send_full() }
+                                    if let TrySendError::Full(_) = e {
+                                        metrics::inc_send_full()
+                                    }
                                     error!(to=%member_name, error=%e, "Falha ao enviar RoomText");
                                 }
                             }
@@ -1882,7 +1888,9 @@ impl ChatCore {
             let username = entry.key();
             let tx = entry.value().1.clone();
             if let Err(e) = tx.try_send(msg.clone()) {
-                if let TrySendError::Full(_) = e { metrics::inc_send_full() }
+                if let TrySendError::Full(_) = e {
+                    metrics::inc_send_full()
+                }
                 error!(to=%username, error=%e, "Falha ao enviar broadcast");
             }
         }
@@ -2015,7 +2023,9 @@ mod tests {
         }
 
         // bob should NOT receive the message
-        if rx_b.try_recv().is_ok() { panic!("bob should not receive RoomText") }
+        if rx_b.try_recv().is_ok() {
+            panic!("bob should not receive RoomText")
+        }
 
         // Now alice joins and sends again
         state.join_room("alice", "#rust");

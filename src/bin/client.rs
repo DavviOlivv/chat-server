@@ -122,8 +122,7 @@ where
 
     // pending: message_id -> (ChatMessage, last_sent_instant, attempts)
     type PendingMessages = HashMap<String, (ChatMessage, Instant, u8)>;
-    let pending: Arc<AsyncMutex<PendingMessages>> =
-        Arc::new(AsyncMutex::new(HashMap::new()));
+    let pending: Arc<AsyncMutex<PendingMessages>> = Arc::new(AsyncMutex::new(HashMap::new()));
     // Histórico local das últimas mensagens (para ordenar por timestamp)
     let history: Arc<AsyncMutex<Vec<ChatMessage>>> = Arc::new(AsyncMutex::new(Vec::new()));
 

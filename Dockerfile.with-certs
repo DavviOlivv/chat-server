@@ -1,0 +1,21 @@
+FROM debian:bookworm-slim
+
+# Image variant that bakes certs into the image. Use only after running `make embed-certs`.
+
+# Create non-root user
+RUN groupadd -r chat && useradd -r -g chat chat
+
+# Copy local release binary (assume host built `target/release/chat_server`)
+COPY target/release/chat_server /usr/local/bin/chat_server
+
+# Copy certs that were prepared with `make embed-certs`
+COPY certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
+RUN chmod +x /usr/local/bin/chat_server
+USER chat
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["/usr/local/bin/chat_server", "--help"] || exit 1
+
+ENTRYPOINT ["/usr/local/bin/chat_server"]

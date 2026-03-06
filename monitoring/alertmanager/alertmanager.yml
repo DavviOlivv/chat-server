@@ -1,0 +1,25 @@
+global:
+  # SMTP example (fill values if you want email alerts)
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alertmanager@example.com'
+  smtp_auth_username: 'user'
+  smtp_auth_password: 'pass'
+
+route:
+  receiver: 'slack-or-email'
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 3h
+
+receivers:
+  - name: 'slack-or-email'
+    # Slack webhook example (uncomment and fill)
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR_WORKSPACE/YOUR_CHANNEL/YOUR_WEBHOOK_TOKEN'
+    #     channel: '#alerts'
+
+    # Email example (uncomment and configure smtp global fields above)
+    # email_configs:
+    #   - to: 'oncall@example.com'
+
+# In production replace placeholders with real Slack webhook or SMTP settings

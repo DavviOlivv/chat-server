@@ -1,0 +1,29 @@
+# Local Dockerfile: assume binary already built on host (target/release/chat_server)
+FROM debian:bookworm-slim
+
+# Minimal local image for fast iteration.
+# NOTE: this Dockerfile assumes you'll provide CA certs at runtime (recommended)
+# Options to provide certs:
+# 1) Mount host certs when running the container:
+#    docker run -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro ...
+# 2) Place a `certs/ca-certificates.crt` in the project root and uncomment the COPY below
+#    to bake them into the image at build time.
+
+# Create non-root user
+RUN groupadd -r chat && useradd -r -g chat chat
+
+# Copy local release binary (assume host built `target/release/chat_server`)
+COPY target/release/chat_server /usr/local/bin/chat_server
+
+# If you want to bake certs into the image, add a `certs/ca-certificates.crt` file
+# to the repo and uncomment the next line. You can create that file locally with:
+#
+#   make embed-certs
+#
+# then uncomment:
+# COPY certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
+RUN chmod +x /usr/local/bin/chat_server
+USER chat
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/chat_server"]

@@ -1,0 +1,22 @@
+# Exemplo mínimo de prometheus.yml para rodar localmente ou em Docker
+# Ajuste paths e targets conforme seu ambiente (host, Docker, Kubernetes).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - 'alert_rules.yml'  # espera-se que este arquivo esteja em mesmo diretório (monitoring/alert_rules.yml)
+
+scrape_configs:
+  - job_name: 'chat_serve'
+    # Em ambiente local/host onde o servidor expõe métricas em :9090
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          env: local
+
+    # Comentário: em Docker Compose use 'chat_server:9090' como target
+    # Em Kubernetes com Service/ServiceMonitor não é necessário adicionar aqui
+
+# Opcional: mais jobs, exporters, etc.

@@ -1,0 +1,36 @@
+version: '3.7'
+services:
+  chat_server:
+    build: ..
+    image: chat_server:latest
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      - METRICS_BIND_ADDR=0.0.0.0:9090
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/chat_server", "--help"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    ports:
+      - "9091:9090" # Prometheus UI
+
+  grafana:
+    image: grafana/grafana:9.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana-dashboard.json:/var/lib/grafana/dashboards/chat_send_full.json:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+
+# Observação: este docker-compose é um exemplo mínimo. Em produção ajuste imagens, volumes e redes conforme necessário.

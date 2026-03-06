@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'chat_serve'
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ['host.docker.internal:9090']
+    # Se você usa docker em Linux e o servidor está no host, troque host.docker.internal pelo host real
+    # Autenticação Bearer (substitua via envsubst):
+    authorization:
+      type: Bearer
+      credentials: "${METRICS_BEARER_TOKEN}"
+
+# Regras e alerting: monte o arquivo de regras em /etc/prometheus/alert_rules.yml
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+# Alertmanager (envsubst não necessário aqui, Alertmanager estará em docker-compose)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']

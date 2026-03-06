@@ -1,0 +1,20 @@
+groups:
+  - name: chat_serve.rules
+    rules:
+      - alert: ChatSendFullHigh
+        expr: increase(chat_send_full_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Altas falhas de envio (channel full)"
+          description: "A métrica chat_send_full_total aumentou rapidamente. Investigue clientes lentos ou sobrecarga."
+
+      - alert: HighUnauthorizedMetricsAccess
+        expr: increase(chat_metrics_unauthorized_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tentativas não autorizadas ao endpoint /metrics"
+          description: "A métrica chat_metrics_unauthorized_total aumentou em 5 minutos. Verifique tentativas de acesso não autorizado."

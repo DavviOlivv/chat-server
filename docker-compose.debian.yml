@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  chat_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.debian
+    environment:
+      - RUST_LOG=info
+      - LOG_JSON=1
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # Optional: agente para coletar logs e enviar ao Elasticsearch/ELK
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.0.0
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - chat_server
+    restart: unless-stopped

@@ -1,0 +1,20 @@
+# Configuração de cores do TUI Client
+# Use cores do terminal: Black, Red, Green, Yellow, Blue, Magenta, Cyan, White
+# Ou cores RGB: rgb(255, 0, 0)
+
+[messages]
+system = "Cyan"
+dm = "Magenta"
+room = "Yellow"
+broadcast = "White"
+
+[ui]
+border = "White"
+tabs_active = "Green"
+tabs_inactive = "Gray"
+notification = "Red"
+input = "White"
+
+[users]
+online = "Green"
+typing = "Yellow"

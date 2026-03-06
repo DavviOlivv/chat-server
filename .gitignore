@@ -1,0 +1,59 @@
+# Rust build artifacts
+/target
+**/*.rs.bk
+*.pdb
+
+# Local certs copied by `make embed-certs`
+certs/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+!certs/.gitkeep
+
+# IDE / Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# Logs
+*.log
+logs/
+
+# Testing and temporary files
+test_*.json
+temp/
+tmp/
+*.tmp
+
+# User data files (specific to this project)
+users.json
+users.db
+colors.toml.local
+
+# OS specific
+Thumbs.db
+desktop.ini
+
+# Coverage reports
+*.profraw
+*.profdata
+/coverage
+
+# Documentation build artifacts
+/book
+/docs/_build

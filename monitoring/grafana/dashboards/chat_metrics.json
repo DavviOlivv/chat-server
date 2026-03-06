@@ -1,0 +1,57 @@
+{
+  "id": null,
+  "title": "Chat Serve Metrics",
+  "tags": ["chat","metrics"],
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Active Sessions",
+      "gridPos": {"x":0,"y":0,"w":6,"h":4},
+      "targets": [{"expr": "chat_active_sessions","format":"time_series"}],
+      "options": {"reduceOptions": {"calcs":["last"]}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Expired Sessions (increase /5m)",
+      "gridPos": {"x":6,"y":0,"w":12,"h":6},
+      "targets": [{"expr": "increase(chat_expired_sessions_total[5m])","legendFormat":"expired (5m)"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Unauthorized /metrics (increase /5m)",
+      "gridPos": {"x":0,"y":4,"w":6,"h":6},
+      "targets": [{"expr": "increase(chat_metrics_unauthorized_total[5m])","legendFormat":"unauth (5m)"}]
+    },
+    {
+      "type": "stat",
+      "title": "Auth Error Rate (unauth /5m)",
+      "gridPos": {"x":0,"y":10,"w":6,"h":4},
+      "targets": [{"expr": "increase(chat_metrics_unauthorized_total[5m])","format":"time_series"}],
+      "options": {
+        "reduceOptions": {"calcs": ["last"]},
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Channel Full Events (increase /5m)",
+      "gridPos": {"x":6,"y":6,"w":12,"h":6},
+      "targets": [{"expr": "increase(chat_send_full_total[5m])","legendFormat":"send_full (5m)"}]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+# Multi-stage Dockerfile: build with Rust, run on debian:bookworm-slim (debuggable runtime)
+
+# Builder stage
+FROM rust:latest AS builder
+WORKDIR /usr/src/chat
+
+# Cache dependencies by copying manifest first
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+
+# Install CA certs and build release binary
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates build-essential pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && cargo build --release --bin chat_server
+
+# Runtime stage using debian slim (can `exec` into container for debugging)
+FROM debian:bookworm-slim
+
+# Create a non-root user for safety
+RUN groupadd -r chat && useradd -r -g chat chat
+
+# Copy binary and CA certs from builder
+COPY --from=builder /usr/src/chat/target/release/chat_server /usr/local/bin/chat_server
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Ensure binary is executable
+RUN chmod +x /usr/local/bin/chat_server
+
+USER chat
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["/usr/local/bin/chat_server", "--help"] || exit 1
+
+ENTRYPOINT ["/usr/local/bin/chat_server"]

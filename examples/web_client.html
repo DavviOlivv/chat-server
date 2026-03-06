@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat-Serve Web Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #login-screen, #chat-screen {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+            max-width: 900px;
+            width: 90%;
+        }
+        
+        #chat-screen {
+            display: none;
+            height: 80vh;
+            max-height: 600px;
+            flex-direction: column;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 600;
+        }
+        
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        #status {
+            text-align: center;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .status-connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        #chat-container {
+            display: flex;
+            flex: 1;
+            gap: 15px;
+            overflow: hidden;
+        }
+        
+        #messages-panel {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #users-panel {
+            flex: 1;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+        
+        #messages {
+            flex: 1;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            background: white;
+            border-left: 3px solid #667eea;
+        }
+        
+        .message-system {
+            background: #e3f2fd;
+            border-left-color: #2196f3;
+            font-style: italic;
+        }
+        
+        .message-dm {
+            background: #fce4ec;
+            border-left-color: #e91e63;
+        }
+        
+        .message-room {
+            background: #fff9c4;
+            border-left-color: #fbc02d;
+        }
+        
+        .message-meta {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 3px;
+        }
+        
+        .message-content {
+            color: #333;
+        }
+        
+        #input-area {
+            display: flex;
+            gap: 10px;
+        }
+        
+        #message-input {
+            flex: 1;
+        }
+        
+        #send-btn {
+            width: auto;
+            padding: 12px 30px;
+        }
+        
+        .user-item {
+            padding: 8px;
+            margin-bottom: 5px;
+            background: white;
+            border-radius: 5px;
+            border-left: 3px solid #4caf50;
+        }
+        
+        .user-typing {
+            border-left-color: #ff9800;
+        }
+        
+        .typing-indicator {
+            color: #ff9800;
+            font-size: 20px;
+        }
+        
+        h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        
+        .commands {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        
+        .commands strong {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <!-- Tela de Login -->
+    <div id="login-screen">
+        <h1>🌐 Chat-Serve Web Client</h1>
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" placeholder="Digite seu username">
+        </div>
+        <div class="form-group">
+            <label for="password">Senha</label>
+            <input type="password" id="password" placeholder="Digite sua senha">
+        </div>
+        <button id="login-btn">Conectar</button>
+        <div id="status"></div>
+        <div class="commands">
+            <strong>Comandos disponíveis:</strong><br>
+            • Mensagem normal → broadcast<br>
+            • /msg &lt;user&gt; &lt;msg&gt; → DM privada<br>
+            • /join &lt;sala&gt; → entrar em sala<br>
+            • /leave → sair da sala
+        </div>
+    </div>
+
+    <!-- Tela de Chat -->
+    <div id="chat-screen">
+        <h1>💬 Chat-Serve</h1>
+        <div id="chat-container">
+            <div id="messages-panel">
+                <div id="messages"></div>
+                <div id="input-area">
+                    <input type="text" id="message-input" placeholder="Digite sua mensagem...">
+                    <button id="send-btn">Enviar</button>
+                </div>
+            </div>
+            <div id="users-panel">
+                <h3>👥 Online (<span id="user-count">0</span>)</h3>
+                <div id="users-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Estado da aplicação
+        let ws = null;
+        let username = '';
+        let sessionToken = '';
+        let typingTimeout = null;
+        let usersOnline = [];
+        let typingUsers = new Set();
+
+        // Elementos DOM
+        const loginScreen = document.getElementById('login-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const usersListDiv = document.getElementById('users-list');
+        const userCountSpan = document.getElementById('user-count');
+
+        // Event listeners
+        document.getElementById('login-btn').addEventListener('click', login);
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            } else {
+                sendTypingIndicator();
+            }
+        });
+
+        function setStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status-${type}`;
+        }
+
+        function login() {
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value.trim();
+
+            if (!user || !pass) {
+                setStatus('⚠️ Preencha username e senha', 'error');
+                return;
+            }
+
+            username = user;
+            setStatus('🔌 Conectando ao gateway WebSocket...', 'connecting');
+
+            // Conectar ao WebSocket Gateway
+            ws = new WebSocket('ws://127.0.0.1:8081');
+
+            ws.onopen = () => {
+                console.log('WebSocket conectado');
+                setStatus('🔐 Autenticando...', 'connecting');
+                
+                // Enviar credenciais de login
+                const loginMsg = {
+                    type: 'Login',
+                    username: user,
+                    password: pass
+                };
+                ws.send(JSON.stringify(loginMsg));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    console.log('Mensagem recebida:', msg);
+                    handleMessage(msg);
+                } catch (e) {
+                    console.error('Erro ao parsear mensagem:', e, event.data);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('Erro WebSocket:', error);
+                setStatus('❌ Erro de conexão', 'error');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket fechado');
+                setStatus('🔌 Conexão perdida', 'error');
+                // Voltar para tela de login
+                setTimeout(() => {
+                    chatScreen.style.display = 'none';
+                    loginScreen.style.display = 'block';
+                }, 2000);
+            };
+        }
+
+        function handleMessage(msg) {
+            switch (msg.type) {
+                case 'SessionToken':
+                    // Login bem-sucedido
+                    sessionToken = msg.token;
+                    console.log('Login OK, token:', sessionToken);
+                    setStatus('✅ Conectado!', 'connected');
+                    
+                    // Trocar para tela de chat
+                    loginScreen.style.display = 'none';
+                    chatScreen.style.display = 'flex';
+                    
+                    // Solicitar lista de usuários
+                    requestUserList();
+                    
+                    // Atualizar lista a cada 5s
+                    setInterval(requestUserList, 5000);
+                    break;
+
+                case 'Ack':
+                    handleAck(msg);
+                    break;
+
+                case 'UserList':
+                    updateUserList(msg.users || []);
+                    break;
+
+                case 'Typing':
+                    handleTyping(msg);
+                    break;
+
+                default:
+                    console.log('Tipo de mensagem desconhecido:', msg.type);
+            }
+        }
+
+        function handleAck(ack) {
+            if (ack.kind === 'Failed') {
+                addMessage('Sistema', ack.info || 'Erro desconhecido', 'system');
+                if (ack.info && ack.info.includes('Credenciais')) {
+                    // Login falhou
+                    setStatus('❌ ' + ack.info, 'error');
+                }
+                return;
+            }
+
+            // Mensagens do sistema
+            if (ack.kind === 'System') {
+                addMessage('Sistema', ack.info || '', 'system');
+                return;
+            }
+
+            // Mensagens de outros usuários
+            const from = ack.from || 'Desconhecido';
+            const content = ack.content || ack.info || '';
+            const isDM = ack.kind === 'Private';
+            const isRoom = ack.info && (ack.info.includes('sala') || ack.info.includes('#'));
+
+            addMessage(from, content, isDM ? 'dm' : (isRoom ? 'room' : 'broadcast'));
+        }
+
+        function handleTyping(msg) {
+            const user = msg.user;
+            if (msg.typing) {
+                typingUsers.add(user);
+            } else {
+                typingUsers.delete(user);
+            }
+            updateUserList(usersOnline);
+        }
+
+        function addMessage(from, content, type = 'broadcast') {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message message-${type}`;
+            
+            const time = new Date().toLocaleTimeString('pt-BR', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'message-meta';
+            
+            let prefix = '';
+            if (type === 'dm') prefix = '🔒 DM ';
+            if (type === 'room') prefix = '🏠 SALA ';
+            
+            metaDiv.textContent = `${time} ${prefix}${from}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            msgDiv.appendChild(metaDiv);
+            msgDiv.appendChild(contentDiv);
+            messagesDiv.appendChild(msgDiv);
+            
+            // Auto-scroll
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            // Determinar tipo de mensagem
+            let action;
+            if (text.startsWith('/msg ')) {
+                // DM privada
+                const parts = text.substring(5).split(' ');
+                const targetUser = parts[0];
+                const content = parts.slice(1).join(' ');
+                action = {
+                    action_type: 'Private',
+                    recipient: targetUser,
+                    content: content
+                };
+            } else if (text.startsWith('/join ')) {
+                const room = text.substring(6).trim();
+                action = {
+                    action_type: 'JoinRoom',
+                    room: room
+                };
+            } else if (text.startsWith('/leave')) {
+                action = {
+                    action_type: 'LeaveRoom'
+                };
+            } else if (text === '/list') {
+                requestUserList();
+                messageInput.value = '';
+                return;
+            } else {
+                // Broadcast normal
+                action = {
+                    action_type: 'Text',
+                    content: text
+                };
+            }
+
+            // Envolver com autenticação
+            const authMsg = {
+                type: 'Authenticated',
+                token: sessionToken,
+                action: action
+            };
+
+            ws.send(JSON.stringify(authMsg));
+            messageInput.value = '';
+            
+            // Parar indicador de digitação
+            sendTypingIndicator(false);
+        }
+
+        function sendTypingIndicator(typing = true) {
+            // Debounce: só envia "parou de digitar" após 500ms
+            clearTimeout(typingTimeout);
+            
+            if (typing) {
+                typingTimeout = setTimeout(() => {
+                    sendTypingIndicator(false);
+                }, 500);
+                
+                // Enviar "digitando"
+                const msg = {
+                    type: 'Authenticated',
+                    token: sessionToken,
+                    action: {
+                        action_type: 'Typing'
+                    }
+                };
+                ws.send(JSON.stringify(msg));
+            } else {
+                // Enviar "parou de digitar"
+                const msg = {
+                    type: 'Authenticated',
+                    token: sessionToken,
+                    action: {
+                        action_type: 'Typing'
+                    }
+                };
+                ws.send(JSON.stringify(msg));
+            }
+        }
+
+        function requestUserList() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            const msg = {
+                type: 'Authenticated',
+                token: sessionToken,
+                action: {
+                    action_type: 'ListUsers'
+                }
+            };
+            ws.send(JSON.stringify(msg));
+        }
+
+        function updateUserList(users) {
+            usersOnline = users;
+            usersListDiv.innerHTML = '';
+            userCountSpan.textContent = users.length;
+            
+            users.forEach(user => {
+                const userDiv = document.createElement('div');
+                userDiv.className = 'user-item';
+                
+                if (typingUsers.has(user)) {
+                    userDiv.classList.add('user-typing');
+                    userDiv.innerHTML = `${user} <span class="typing-indicator">⌨️</span>`;
+                } else {
+                    userDiv.textContent = user;
+                }
+                
+                usersListDiv.appendChild(userDiv);
+            });
+        }
+    </script>
+</body>
+</html>

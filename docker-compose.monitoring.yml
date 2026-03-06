@@ -1,0 +1,46 @@
+version: '3.8'
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+# Nota: Para usar autenticação Bearer para /metrics, edite monitoring/prometheus/prometheus.yml
+# substituindo ${METRICS_BEARER_TOKEN} pelo seu token ou execute:
+#
+#   export METRICS_BEARER_TOKEN=secret123
+#   envsubst < monitoring/prometheus/prometheus.yml.template > monitoring/prometheus/prometheus.yml
+#
+# e então inicie o stack:
+#   docker compose -f docker-compose.monitoring.yml up -d

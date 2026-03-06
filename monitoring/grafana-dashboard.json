@@ -1,0 +1,29 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "id": 1,
+      "title": "chat_send_full_total (rate)",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "sum(rate(chat_send_full_total[1m]))",
+          "interval": "",
+          "legendFormat": "send_full_rate",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 30,
+  "title": "Chat Serve Metrics",
+  "version": 1
+}

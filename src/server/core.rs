@@ -389,21 +389,90 @@ impl ChatCore {
         timestamp: DateTime<Utc>,
         message_id: String,
     ) -> bool {
-        // Só funciona se tivermos database
+        // Métricas: mensagem privada enviada
+        metrics::inc_messages_sent();
+        metrics::inc_private_messages();
+
+        // 1. Deduplicação - verifica se mensagem já foi processada
+        if self.state.check_and_mark_message_id(&message_id) {
+            // Já processada: envia ACK de dedup
+            if let Some(sender_tx) = self.state.get_client_tx(&from) {
+                self.send_reliable(
+                    sender_tx,
+                    ChatMessage::Ack {
+                        kind: AckKind::Delivered,
+                        info: format!("DM para {} já entregue (dedup).", to),
+                        message_id: Some(message_id),
+                    },
+                );
+            }
+            return true;
+        }
+
+        // 2. Verifica se destinatário existe
+        let is_recipient_online = self.state.get_client_tx(&to).is_some();
+        let recipient_exists = if !is_recipient_online {
+            if let Some(auth) = &self.auth {
+                auth.user_exists(&to)
+            } else {
+                self.state.has_user(&to)
+            }
+        } else {
+            true
+        };
+
+        if !recipient_exists {
+            if let Some(sender_tx) = self.state.get_client_tx(&from) {
+                self.send_reliable(
+                    sender_tx,
+                    ChatMessage::Error(format!("Usuário '{}' não encontrado.", to)),
+                );
+            }
+            return false;
+        }
+
+        // 3. Só funciona se tivermos database
         let db = match &self.db {
             Some(d) => d,
             None => return false,
         };
 
-        // Criar adapters
+        // 4. Verifica limite de mensagens pendentes se destinatário offline
+        if !is_recipient_online {
+            let max_pending = std::env::var("MAX_PENDING_PER_USER")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(1000);
+
+            match db.count_pending_messages(&to) {
+                Ok(count) if count >= max_pending => {
+                    metrics::inc_queue_full();
+                    warn!(from=%from, to=%to, pending=%count, max=%max_pending, "Caixa de entrada cheia");
+                    if let Some(sender_tx) = self.state.get_client_tx(&from) {
+                        self.send_reliable(
+                            sender_tx,
+                            ChatMessage::Error(format!(
+                                "Caixa de entrada de '{}' cheia ({}/{} mensagens). Tente mais tarde.",
+                                to, count, max_pending
+                            )),
+                        );
+                    }
+                    return false;
+                }
+                Err(e) => {
+                    debug!(error=%e, "Falha ao verificar limite de mensagens pendentes");
+                }
+                _ => {}
+            }
+        }
+
+        // 5. Criar adapters e use case
         let message_repo = DatabaseMessageAdapter::new(db.clone());
         let offline_queue = DatabaseMessageAdapter::new(db.clone());
         let presence = ChatStatePresenceAdapter::new(self.state.clone());
-
-        // Criar use case
         let send_dm = SendDirectMessage::new(message_repo, offline_queue, presence);
 
-        // Criar entidade
+        // 6. Criar entidade
         let dm = DirectMessage::new(
             message_id.clone(),
             from.clone(),
@@ -412,7 +481,7 @@ impl ChatCore {
             timestamp,
         );
 
-        // Executar use case (salva no banco, verifica presença)
+        // 7. Executar use case (salva no banco, verifica presença)
         let delivered = match send_dm.execute(dm) {
             Ok(messaging_application::DeliveryStatus::Delivered) => {
                 // Usuário online - enviar pelo channel
@@ -422,15 +491,98 @@ impl ChatCore {
                         to: to.clone(),
                         content,
                         timestamp,
-                        message_id: Some(message_id),
+                        message_id: Some(message_id.clone()),
                     };
-                    self.send_reliable(target_tx, msg);
+
+                    // Enviar de forma assíncrona se possível
+                    let target_tx_clone = target_tx.clone();
+                    let sender_tx_opt = self.state.get_client_tx(&from);
+                    let to_clone = to.clone();
+                    let message_id_clone = message_id.clone();
+
+                    if tokio::runtime::Handle::try_current().is_ok() {
+                        tokio::spawn(async move {
+                            match target_tx_clone.send(msg).await {
+                                Ok(()) => {
+                                    metrics::inc_messages_delivered();
+                                    if let Some(sender_tx) = sender_tx_opt {
+                                        let _ = sender_tx
+                                            .send(ChatMessage::Ack {
+                                                kind: AckKind::Delivered,
+                                                info: format!("DM para {} entregue.", to_clone),
+                                                message_id: Some(message_id_clone),
+                                            })
+                                            .await;
+                                    }
+                                }
+                                Err(e) => {
+                                    error!(to=%to_clone, error=%e, "Falha ao enviar DM");
+                                    if let Some(sender_tx) = sender_tx_opt {
+                                        let _ = sender_tx
+                                            .send(ChatMessage::Error(format!(
+                                                "Falha ao entregar DM para {}.",
+                                                to_clone
+                                            )))
+                                            .await;
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        // Fallback síncrono para testes
+                        if let Err(e) = target_tx.try_send(msg) {
+                            if let TrySendError::Full(_) = e {
+                                metrics::inc_send_full()
+                            }
+                            error!(to=%to, error=%e, "Falha ao enviar DM (try_send)");
+                            if let Some(sender_tx) = sender_tx_opt {
+                                self.send_reliable(
+                                    sender_tx,
+                                    ChatMessage::Error(format!("Falha ao entregar DM para {}.", to)),
+                                );
+                            }
+                        } else {
+                            metrics::inc_messages_delivered();
+                            if let Some(sender_tx) = sender_tx_opt {
+                                self.send_reliable(
+                                    sender_tx,
+                                    ChatMessage::Ack {
+                                        kind: AckKind::Delivered,
+                                        info: format!("DM para {} entregue.", to),
+                                        message_id: Some(message_id),
+                                    },
+                                );
+                            }
+                        }
+                    }
                 }
                 true
             }
-            Ok(messaging_application::DeliveryStatus::Queued) => false,
+            Ok(messaging_application::DeliveryStatus::Queued) => {
+                // Mensagem enfileirada para entrega offline
+                metrics::inc_messages_queued();
+                info!(from=%from, to=%to, "📭 Mensagem salva para entrega offline");
+
+                if let Some(sender_tx) = self.state.get_client_tx(&from) {
+                    self.send_reliable(
+                        sender_tx,
+                        ChatMessage::Ack {
+                            kind: AckKind::Received,
+                            info: format!("Mensagem para {} será entregue quando voltar online.", to),
+                            message_id: Some(message_id),
+                        },
+                    );
+                }
+                false
+            }
             Err(e) => {
                 warn!(error=%e, "Erro ao enviar DM via use case");
+                if let Some(sender_tx) = self.state.get_client_tx(&from) {
+                    self.send_reliable(
+                        sender_tx,
+                        ChatMessage::Error(format!("Falha ao enviar mensagem: {}", e)),
+                    );
+                }
                 false
             }
         };

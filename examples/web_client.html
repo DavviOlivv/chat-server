@@ -276,6 +276,7 @@
         // Estado da aplicação
         let ws = null;
         let username = '';
+        let currentUsername = '';
         let sessionToken = '';
         let typingTimeout = null;
         let usersOnline = [];
@@ -326,10 +327,12 @@
                 setStatus('🔐 Autenticando...', 'connecting');
                 
                 // Enviar credenciais de login
+                // Formato correto para ChatMessage::Login
                 const loginMsg = {
-                    type: 'Login',
-                    username: user,
-                    password: pass
+                    Login: {
+                        username: user,
+                        password: pass
+                    }
                 };
                 ws.send(JSON.stringify(loginMsg));
             };
@@ -361,38 +364,50 @@
         }
 
         function handleMessage(msg) {
-            switch (msg.type) {
-                case 'SessionToken':
-                    // Login bem-sucedido
-                    sessionToken = msg.token;
-                    console.log('Login OK, token:', sessionToken);
-                    setStatus('✅ Conectado!', 'connected');
-                    
-                    // Trocar para tela de chat
-                    loginScreen.style.display = 'none';
-                    chatScreen.style.display = 'flex';
-                    
-                    // Solicitar lista de usuários
-                    requestUserList();
-                    
-                    // Atualizar lista a cada 5s
-                    setInterval(requestUserList, 5000);
-                    break;
-
-                case 'Ack':
-                    handleAck(msg);
-                    break;
-
-                case 'UserList':
-                    updateUserList(msg.users || []);
-                    break;
-
-                case 'Typing':
-                    handleTyping(msg);
-                    break;
-
-                default:
-                    console.log('Tipo de mensagem desconhecido:', msg.type);
+            // Formato do Rust: cada variante do enum é uma chave
+            // Exemplo: {"SessionToken": {"token": "...", "username": "..."}}
+            
+            if (msg.SessionToken) {
+                // Login bem-sucedido
+                sessionToken = msg.SessionToken.token;
+                currentUsername = msg.SessionToken.username;
+                console.log('Login OK, token:', sessionToken);
+                setStatus('✅ Conectado!', 'connected');
+                
+                // Trocar para tela de chat
+                loginScreen.style.display = 'none';
+                chatScreen.style.display = 'flex';
+                
+                // Solicitar lista de usuários
+                requestUserList();
+                
+                // Atualizar lista a cada 5s
+                setInterval(requestUserList, 5000);
+                
+            } else if (msg.Ack) {
+                handleAck(msg.Ack);
+                
+            } else if (msg.UserList) {
+                updateUserList(msg.UserList.users || []);
+                
+            } else if (msg.Text) {
+                addMessage(msg.Text.from, msg.Text.content, 'broadcast');
+                
+            } else if (msg.RoomText) {
+                addMessage(msg.RoomText.from, msg.RoomText.content, 'room');
+                
+            } else if (msg.Private) {
+                addMessage(msg.Private.from, msg.Private.content, 'dm');
+                
+            } else if (msg.Error) {
+                console.error('Erro do servidor:', msg.Error);
+                addMessage('Sistema', `❌ ${msg.Error}`, 'system');
+                
+            } else if (msg.Typing) {
+                handleTyping(msg.Typing);
+                
+            } else {
+                console.log('Tipo de mensagem desconhecido:', msg);
             }
         }
 
@@ -465,7 +480,7 @@
             const text = messageInput.value.trim();
             if (!text) return;
 
-            // Determinar tipo de mensagem
+            // Determinar tipo de ação - formato correto para ChatAction
             let action;
             if (text.startsWith('/msg ')) {
                 // DM privada
@@ -473,19 +488,28 @@
                 const targetUser = parts[0];
                 const content = parts.slice(1).join(' ');
                 action = {
-                    action_type: 'Private',
-                    recipient: targetUser,
-                    content: content
+                    Private: {
+                        from: currentUsername,
+                        to: targetUser,
+                        content: content,
+                        timestamp: new Date().toISOString(),
+                        message_id: null
+                    }
                 };
             } else if (text.startsWith('/join ')) {
                 const room = text.substring(6).trim();
                 action = {
-                    action_type: 'JoinRoom',
-                    room: room
+                    JoinRoom: {
+                        room: room
+                    }
                 };
             } else if (text.startsWith('/leave')) {
+                const parts = text.substring(6).trim();
+                const room = parts || 'main';
                 action = {
-                    action_type: 'LeaveRoom'
+                    LeaveRoom: {
+                        room: room
+                    }
                 };
             } else if (text === '/list') {
                 requestUserList();
@@ -494,16 +518,20 @@
             } else {
                 // Broadcast normal
                 action = {
-                    action_type: 'Text',
-                    content: text
+                    Text: {
+                        from: currentUsername,
+                        content: text,
+                        timestamp: new Date().toISOString()
+                    }
                 };
             }
 
-            // Envolver com autenticação
+            // Envolver com autenticação - formato correto para ChatMessage::Authenticated
             const authMsg = {
-                type: 'Authenticated',
-                token: sessionToken,
-                action: action
+                Authenticated: {
+                    token: sessionToken,
+                    action: action
+                }
             };
 
             ws.send(JSON.stringify(authMsg));
@@ -522,22 +550,30 @@
                     sendTypingIndicator(false);
                 }, 500);
                 
-                // Enviar "digitando"
+                // Enviar "digitando" - formato correto para ChatAction::Typing
                 const msg = {
-                    type: 'Authenticated',
-                    token: sessionToken,
-                    action: {
-                        action_type: 'Typing'
+                    Authenticated: {
+                        token: sessionToken,
+                        action: {
+                            Typing: {
+                                user: currentUsername,
+                                typing: true
+                            }
+                        }
                     }
                 };
                 ws.send(JSON.stringify(msg));
             } else {
                 // Enviar "parou de digitar"
                 const msg = {
-                    type: 'Authenticated',
-                    token: sessionToken,
-                    action: {
-                        action_type: 'Typing'
+                    Authenticated: {
+                        token: sessionToken,
+                        action: {
+                            Typing: {
+                                user: currentUsername,
+                                typing: false
+                            }
+                        }
                     }
                 };
                 ws.send(JSON.stringify(msg));
@@ -547,11 +583,15 @@
         function requestUserList() {
             if (!ws || ws.readyState !== WebSocket.OPEN) return;
             
+            // Formato correto para ChatAction::ListRequest
             const msg = {
-                type: 'Authenticated',
-                token: sessionToken,
-                action: {
-                    action_type: 'ListUsers'
+                Authenticated: {
+                    token: sessionToken,
+                    action: {
+                        ListRequest: {
+                            from: currentUsername
+                        }
+                    }
                 }
             };
             ws.send(JSON.stringify(msg));

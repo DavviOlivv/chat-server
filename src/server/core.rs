@@ -494,66 +494,20 @@ impl ChatCore {
                         message_id: Some(message_id.clone()),
                     };
 
-                    // Enviar de forma assíncrona se possível
-                    let target_tx_clone = target_tx.clone();
-                    let sender_tx_opt = self.state.get_client_tx(&from);
-                    let to_clone = to.clone();
-                    let message_id_clone = message_id.clone();
+                    // Enviar usando send_reliable (já lida com async/sync corretamente)
+                    self.send_reliable(target_tx, msg);
+                    metrics::inc_messages_delivered();
 
-                    if tokio::runtime::Handle::try_current().is_ok() {
-                        tokio::spawn(async move {
-                            match target_tx_clone.send(msg).await {
-                                Ok(()) => {
-                                    metrics::inc_messages_delivered();
-                                    if let Some(sender_tx) = sender_tx_opt {
-                                        let _ = sender_tx
-                                            .send(ChatMessage::Ack {
-                                                kind: AckKind::Delivered,
-                                                info: format!("DM para {} entregue.", to_clone),
-                                                message_id: Some(message_id_clone),
-                                            })
-                                            .await;
-                                    }
-                                }
-                                Err(e) => {
-                                    error!(to=%to_clone, error=%e, "Falha ao enviar DM");
-                                    if let Some(sender_tx) = sender_tx_opt {
-                                        let _ = sender_tx
-                                            .send(ChatMessage::Error(format!(
-                                                "Falha ao entregar DM para {}.",
-                                                to_clone
-                                            )))
-                                            .await;
-                                    }
-                                }
-                            }
-                        });
-                    } else {
-                        // Fallback síncrono para testes
-                        if let Err(e) = target_tx.try_send(msg) {
-                            if let TrySendError::Full(_) = e {
-                                metrics::inc_send_full()
-                            }
-                            error!(to=%to, error=%e, "Falha ao enviar DM (try_send)");
-                            if let Some(sender_tx) = sender_tx_opt {
-                                self.send_reliable(
-                                    sender_tx,
-                                    ChatMessage::Error(format!("Falha ao entregar DM para {}.", to)),
-                                );
-                            }
-                        } else {
-                            metrics::inc_messages_delivered();
-                            if let Some(sender_tx) = sender_tx_opt {
-                                self.send_reliable(
-                                    sender_tx,
-                                    ChatMessage::Ack {
-                                        kind: AckKind::Delivered,
-                                        info: format!("DM para {} entregue.", to),
-                                        message_id: Some(message_id),
-                                    },
-                                );
-                            }
-                        }
+                    // Enviar ACK ao remetente
+                    if let Some(sender_tx) = self.state.get_client_tx(&from) {
+                        self.send_reliable(
+                            sender_tx,
+                            ChatMessage::Ack {
+                                kind: AckKind::Delivered,
+                                info: format!("DM para {} entregue.", to),
+                                message_id: Some(message_id),
+                            },
+                        );
                     }
                 }
                 true
@@ -568,7 +522,10 @@ impl ChatCore {
                         sender_tx,
                         ChatMessage::Ack {
                             kind: AckKind::Received,
-                            info: format!("Mensagem para {} será entregue quando voltar online.", to),
+                            info: format!(
+                                "Mensagem para {} será entregue quando voltar online.",
+                                to
+                            ),
                             message_id: Some(message_id),
                         },
                     );

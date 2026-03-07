@@ -1,9 +1,13 @@
 use crate::model::message::{AckKind, ChatAction, ChatMessage, StoredMessage};
 use crate::server::auth::AuthManager;
 use crate::server::database::{Database, MessageType};
+use crate::server::messaging_adapter::DatabaseMessageAdapter;
+use crate::server::presence_adapter::ChatStatePresenceAdapter;
 use crate::server::state::ChatState;
 use crate::utils::metrics;
 use chrono::{DateTime, Utc};
+use messaging_application::SendDirectMessage;
+use messaging_domain::DirectMessage;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -308,7 +312,9 @@ impl ChatCore {
                     }
                     return;
                 }
-                self.send_private_message(from, to, content, timestamp, message_id);
+                // Usar novo método via Clean Architecture
+                let mid = message_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                let _ = self.send_dm_via_use_case(from, to, content, timestamp, mid);
             }
             ChatMessage::ListRequest { from } => {
                 if !self.state.check_rate_limit(&from, rate_limit_per_sec()) {
@@ -373,6 +379,47 @@ impl ChatCore {
         }
     }
 
+    /// Novo método usando Clean Architecture - envia DM via use case
+    /// Retorna true se entregue, false se enfileirado
+    fn send_dm_via_use_case(
+        &self,
+        from: String,
+        to: String,
+        content: String,
+        timestamp: DateTime<Utc>,
+        message_id: String,
+    ) -> bool {
+        // Só funciona se tivermos database
+        let db = match &self.db {
+            Some(d) => d,
+            None => return false,
+        };
+
+        // Criar adapters
+        let message_repo = DatabaseMessageAdapter::new(db.clone());
+        let offline_queue = DatabaseMessageAdapter::new(db.clone());
+        let presence = ChatStatePresenceAdapter::new(self.state.clone());
+
+        // Criar use case
+        let send_dm = SendDirectMessage::new(message_repo, offline_queue, presence);
+
+        // Criar entidade
+        let dm = DirectMessage::new(message_id, from, to, content, timestamp);
+
+        // Executar use case
+        match send_dm.execute(dm) {
+            Ok(messaging_application::DeliveryStatus::Delivered) => true,
+            Ok(messaging_application::DeliveryStatus::Queued) => false,
+            Err(e) => {
+                warn!(error=%e, "Erro ao enviar DM via use case");
+                false
+            }
+        }
+    }
+
+    /// DEPRECATED: Use send_dm_via_use_case() instead
+    /// Legacy method - mantido apenas para testes e compatibilidade temporária
+    #[deprecated(since = "0.3.0", note = "Use send_dm_via_use_case() que usa Clean Architecture")]
     pub fn send_private_message(
         &self,
         from: String,
@@ -725,7 +772,9 @@ impl ChatCore {
                     }
                     return;
                 }
-                self.send_private_message(username, to, content, timestamp, message_id);
+                // Usar novo método via Clean Architecture
+                let mid = message_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                let _ = self.send_dm_via_use_case(username, to, content, timestamp, mid);
             }
             ChatAction::ListRequest { from: _ } => {
                 if !self.state.check_rate_limit(&username, rate_limit_per_sec()) {

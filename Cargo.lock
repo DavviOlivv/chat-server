@@ -56,6 +56,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "auth-application"
+version = "0.1.0"
+dependencies = [
+ "auth-domain",
+ "bcrypt",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "auth-domain"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "auth-infrastructure"
+version = "0.1.0"
+dependencies = [
+ "auth-domain",
+ "chrono",
+ "dashmap",
+ "rusqlite",
+ "tracing",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

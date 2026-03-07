@@ -1,0 +1,11 @@
+[package]
+name = "auth-infrastructure"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+auth-domain = { path = "../domain" }
+dashmap = "5.4"
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"

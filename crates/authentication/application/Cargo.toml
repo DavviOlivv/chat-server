@@ -1,0 +1,10 @@
+[package]
+name = "auth-application"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+auth-domain = { path = "../domain" }
+bcrypt = "0.15"
+uuid = { version = "1.4", features = ["v4"] }
+tracing = "0.1"

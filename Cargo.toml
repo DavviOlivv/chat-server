@@ -4,6 +4,8 @@ members = [
     "crates/authentication/domain",
     "crates/authentication/application",
     "crates/authentication/infrastructure",
+    "crates/messaging/domain",
+    "crates/messaging/application",
 ]
 resolver = "2"
 

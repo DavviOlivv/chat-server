@@ -312,9 +312,8 @@ impl ChatCore {
                     }
                     return;
                 }
-                // Usar novo método via Clean Architecture
-                let mid = message_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-                let _ = self.send_dm_via_use_case(from, to, content, timestamp, mid);
+                #[allow(deprecated)]
+                self.send_private_message(from, to, content, timestamp, message_id);
             }
             ChatMessage::ListRequest { from } => {
                 if !self.state.check_rate_limit(&from, rate_limit_per_sec()) {
@@ -381,6 +380,8 @@ impl ChatCore {
 
     /// Novo método usando Clean Architecture - envia DM via use case
     /// Retorna true se entregue, false se enfileirado
+    /// TODO: Migrar todas as chamadas para este método quando arquitetura estiver completa
+    #[allow(dead_code)]
     fn send_dm_via_use_case(
         &self,
         from: String,
@@ -905,9 +906,8 @@ impl ChatCore {
                     }
                     return;
                 }
-                // Usar novo método via Clean Architecture
-                let mid = message_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-                let _ = self.send_dm_via_use_case(username, to, content, timestamp, mid);
+                #[allow(deprecated)]
+                self.send_private_message(username, to, content, timestamp, message_id);
             }
             ChatAction::ListRequest { from: _ } => {
                 if !self.state.check_rate_limit(&username, rate_limit_per_sec()) {

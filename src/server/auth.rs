@@ -2,7 +2,7 @@ use crate::server::auth_adapter::DashMapSessionAdapter;
 use crate::server::database::Database;
 use crate::server::database_adapter::DatabaseUserAdapter;
 use auth_application::*;
-use auth_domain::{AuthError, Credentials};
+use auth_domain::Credentials;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -13,7 +13,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{error, info, warn};
-use uuid::Uuid;
 
 /// Estrutura para persistência de usuários (legacy JSON)
 #[derive(Debug, Serialize, Deserialize, Clone)]

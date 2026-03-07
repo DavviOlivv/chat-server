@@ -404,17 +404,38 @@ impl ChatCore {
         let send_dm = SendDirectMessage::new(message_repo, offline_queue, presence);
 
         // Criar entidade
-        let dm = DirectMessage::new(message_id, from, to, content, timestamp);
+        let dm = DirectMessage::new(
+            message_id.clone(),
+            from.clone(),
+            to.clone(),
+            content.clone(),
+            timestamp,
+        );
 
-        // Executar use case
-        match send_dm.execute(dm) {
-            Ok(messaging_application::DeliveryStatus::Delivered) => true,
+        // Executar use case (salva no banco, verifica presença)
+        let delivered = match send_dm.execute(dm) {
+            Ok(messaging_application::DeliveryStatus::Delivered) => {
+                // Usuário online - enviar pelo channel
+                if let Some(target_tx) = self.state.get_client_tx(&to) {
+                    let msg = ChatMessage::Private {
+                        from: from.clone(),
+                        to: to.clone(),
+                        content,
+                        timestamp,
+                        message_id: Some(message_id),
+                    };
+                    self.send_reliable(target_tx, msg);
+                }
+                true
+            }
             Ok(messaging_application::DeliveryStatus::Queued) => false,
             Err(e) => {
                 warn!(error=%e, "Erro ao enviar DM via use case");
                 false
             }
-        }
+        };
+
+        delivered
     }
 
     /// DEPRECATED: Use send_dm_via_use_case() instead

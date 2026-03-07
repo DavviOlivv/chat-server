@@ -243,7 +243,8 @@
             <label for="password">Senha</label>
             <input type="password" id="password" placeholder="Digite sua senha">
         </div>
-        <button id="login-btn">Conectar</button>
+        <button id="login-btn">Login</button>
+        <button id="register-btn" style="margin-top: 10px; background: #764ba2;">Registrar</button>
         <div id="status"></div>
         <div class="commands">
             <strong>Comandos disponíveis:</strong><br>
@@ -293,6 +294,7 @@
 
         // Event listeners
         document.getElementById('login-btn').addEventListener('click', login);
+        document.getElementById('register-btn').addEventListener('click', register);
         document.getElementById('send-btn').addEventListener('click', sendMessage);
         messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -305,6 +307,74 @@
         function setStatus(message, type) {
             statusDiv.textContent = message;
             statusDiv.className = `status-${type}`;
+        }
+
+        function register() {
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value.trim();
+
+            if (!user || !pass) {
+                setStatus('⚠️ Preencha username e senha', 'error');
+                return;
+            }
+
+            if (pass.length < 8) {
+                setStatus('⚠️ Senha deve ter no mínimo 8 caracteres', 'error');
+                return;
+            }
+
+            setStatus('🔌 Conectando ao gateway WebSocket...', 'connecting');
+
+            // Conectar ao WebSocket Gateway
+            ws = new WebSocket('ws://127.0.0.1:8081');
+
+            ws.onopen = () => {
+                console.log('WebSocket conectado para registro');
+                setStatus('📝 Registrando usuário...', 'connecting');
+                
+                // Enviar registro
+                const registerMsg = {
+                    Register: {
+                        username: user,
+                        password: pass
+                    }
+                };
+                ws.send(JSON.stringify(registerMsg));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    console.log('Mensagem recebida:', msg);
+                    
+                    if (msg.Ack) {
+                        if (msg.Ack.kind === 'Failed') {
+                            setStatus('❌ ' + msg.Ack.info, 'error');
+                            ws.close();
+                        } else {
+                            setStatus('✅ Registro bem-sucedido! Faça login agora.', 'connected');
+                            ws.close();
+                            setTimeout(() => {
+                                document.getElementById('login-btn').click();
+                            }, 1500);
+                        }
+                    } else if (msg.Error) {
+                        setStatus('❌ ' + msg.Error, 'error');
+                        ws.close();
+                    }
+                } catch (e) {
+                    console.error('Erro ao parsear mensagem:', e, event.data);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('Erro WebSocket:', error);
+                setStatus('❌ Erro de conexão', 'error');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket fechado');
+            };
         }
 
         function login() {

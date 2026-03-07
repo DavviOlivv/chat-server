@@ -15,6 +15,9 @@ edition = "2021"
 [dependencies]
 # Dependências internas
 chat-domain = { path = "crates/domain" }
+auth-domain = { path = "crates/authentication/domain" }
+auth-application = { path = "crates/authentication/application" }
+auth-infrastructure = { path = "crates/authentication/infrastructure" }
 
 # Dependências externas
 serde = { version = "1.0", features = ["derive"] }

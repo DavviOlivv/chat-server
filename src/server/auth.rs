@@ -1,4 +1,8 @@
+use crate::server::auth_adapter::DashMapSessionAdapter;
 use crate::server::database::Database;
+use crate::server::database_adapter::DatabaseUserAdapter;
+use auth_application::*;
+use auth_domain::{AuthError, Credentials};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -24,9 +28,9 @@ struct UsersFile {
 }
 
 #[derive(Debug, Clone)]
-struct SessionRecord {
-    username: String,
-    created_at: DateTime<Utc>,
+pub struct SessionRecord {
+    pub username: String,
+    pub created_at: DateTime<Utc>,
 }
 
 // Prometheus metrics
@@ -169,60 +173,21 @@ impl AuthManager {
 
     /// Registra novo usuário com hash bcrypt
     pub fn register(&self, username: &str, password: &str) -> Result<(), String> {
-        // Validação básica
-        if username.is_empty() || password.is_empty() {
-            return Err("Username e password não podem ser vazios".to_string());
-        }
+        // Criar adapters
+        let user_repo = DatabaseUserAdapter::new(self.db.clone());
+        let register_use_case = RegisterUser::new(user_repo);
 
-        if username.len() < 3 {
-            return Err("Username deve ter no mínimo 3 caracteres".to_string());
-        }
-
-        if password.len() < 6 {
-            return Err("Password deve ter no mínimo 6 caracteres".to_string());
-        }
-
-        // Verifica se usuário já existe no banco
-        if let Ok(Some(_)) = self.db.get_user(username) {
-            return Err(format!("Usuário '{}' já existe", username));
-        }
-
-        // Gera hash bcrypt (custo configurável via BCRYPT_COST, default 12)
-        let cost: u32 = std::env::var("BCRYPT_COST")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(12u32);
-        let hash =
-            bcrypt::hash(password, cost).map_err(|e| format!("Falha ao gerar hash: {}", e))?;
-
-        // Persiste no banco
-        self.db
-            .insert_user(username, &hash)
-            .map_err(|e| format!("Falha ao salvar usuário no banco: {}", e))?;
-
-        info!("✅ Usuário '{}' registrado com sucesso", username);
-        Ok(())
+        // Executar use case
+        let credentials = Credentials::new(username.to_string(), password.to_string());
+        register_use_case
+            .execute(credentials)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 
     /// Autentica usuário e retorna token de sessão
     pub fn login(&self, username: &str, password: &str) -> Result<String, String> {
-        // Busca usuário no banco
-        let user = self
-            .db
-            .get_user(username)
-            .map_err(|e| format!("Erro ao buscar usuário: {}", e))?
-            .ok_or_else(|| format!("Usuário '{}' não encontrado", username))?;
-
-        // Verifica password com bcrypt
-        let valid = bcrypt::verify(password, &user.password_hash)
-            .map_err(|e| format!("Falha ao verificar password: {}", e))?;
-
-        if !valid {
-            warn!("🔒 Tentativa de login falhou para usuário '{}'", username);
-            return Err("Password incorreto".to_string());
-        }
-
-        // Verificar se usuário está banido
+        // Verificar se usuário está banido ANTES de processar login
         if let Ok(banned) = self.db.is_banned(username) {
             if banned {
                 info!("🚫 Tentativa de login de usuário banido: {}", username);
@@ -230,20 +195,21 @@ impl AuthManager {
             }
         }
 
-        // Gera token de sessão (UUID v4)
-        let token = Uuid::new_v4().to_string();
+        // Criar adapters
+        let user_repo = DatabaseUserAdapter::new(self.db.clone());
+        let session_repo = DashMapSessionAdapter::new(self.sessions.clone());
+        let login_use_case = LoginUser::new(user_repo, session_repo);
 
-        // Salva sessão com timestamp
-        let rec = SessionRecord {
-            username: username.to_string(),
-            created_at: Utc::now(),
-        };
-        self.sessions.insert(token.clone(), rec);
+        // Executar use case
+        let credentials = Credentials::new(username.to_string(), password.to_string());
+        let result = login_use_case
+            .execute(credentials)
+            .map_err(|e| e.to_string())?;
+
         // Atualiza métrica de sessões ativas
         ACTIVE_SESSIONS.set(self.sessions.len() as f64);
 
-        info!("🔓 Usuário '{}' autenticado - token gerado", username);
-        Ok(token)
+        Ok(result)
     }
 
     /// Valida token e retorna username associado

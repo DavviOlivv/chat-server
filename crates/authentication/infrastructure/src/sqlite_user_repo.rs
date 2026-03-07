@@ -10,9 +10,8 @@ pub struct SqliteUserRepository {
 
 impl SqliteUserRepository {
     pub fn new(db_path: &str) -> AuthResult<Self> {
-        let conn = Connection::open(db_path).map_err(|e| {
-            AuthError::PersistenceError(format!("Falha ao abrir banco: {}", e))
-        })?;
+        let conn = Connection::open(db_path)
+            .map_err(|e| AuthError::PersistenceError(format!("Falha ao abrir banco: {}", e)))?;
 
         // Criar tabela se não existir
         conn.execute(
@@ -22,9 +21,7 @@ impl SqliteUserRepository {
             )",
             [],
         )
-        .map_err(|e| {
-            AuthError::PersistenceError(format!("Falha ao criar tabela users: {}", e))
-        })?;
+        .map_err(|e| AuthError::PersistenceError(format!("Falha ao criar tabela users: {}", e)))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -60,9 +57,7 @@ impl UserRepository for SqliteUserRepository {
 
         let mut stmt = conn
             .prepare("SELECT username, password_hash FROM users WHERE username = ?1")
-            .map_err(|e| {
-                AuthError::PersistenceError(format!("Falha ao preparar query: {}", e))
-            })?;
+            .map_err(|e| AuthError::PersistenceError(format!("Falha ao preparar query: {}", e)))?;
 
         let result = stmt
             .query_row(params![username], |row| {
@@ -89,9 +84,7 @@ impl UserRepository for SqliteUserRepository {
 
         let count: usize = conn
             .query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
-            .map_err(|e| {
-                AuthError::PersistenceError(format!("Falha ao contar usuários: {}", e))
-            })?;
+            .map_err(|e| AuthError::PersistenceError(format!("Falha ao contar usuários: {}", e)))?;
 
         Ok(count)
     }

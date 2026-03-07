@@ -281,6 +281,9 @@ dependencies = [
 name = "chat-serve"
 version = "0.1.0"
 dependencies = [
+ "auth-application",
+ "auth-domain",
+ "auth-infrastructure",
  "axum",
  "bcrypt",
  "chat-domain",

@@ -419,7 +419,10 @@ impl ChatCore {
 
     /// DEPRECATED: Use send_dm_via_use_case() instead
     /// Legacy method - mantido apenas para testes e compatibilidade temporária
-    #[deprecated(since = "0.3.0", note = "Use send_dm_via_use_case() que usa Clean Architecture")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use send_dm_via_use_case() que usa Clean Architecture"
+    )]
     pub fn send_private_message(
         &self,
         from: String,

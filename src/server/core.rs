@@ -1840,6 +1840,7 @@ impl ChatCore {
                 );
 
                 // 🚀 FLUSH: Buscar e enviar mensagens pendentes
+                // TODO Fase 3.5: Migrar para use case DeliverPendingMessages quando refatorar
                 if let Some(db) = &self.db {
                     let db_clone = db.clone();
                     let username_clone = username.clone();

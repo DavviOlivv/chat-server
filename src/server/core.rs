@@ -1967,6 +1967,7 @@ mod tests {
     use tokio::sync::mpsc;
 
     #[test]
+    #[allow(deprecated)] // Teste do método legado
     fn test_send_private_and_ack() {
         let state = Arc::new(ChatState::new());
         let (tx_a, mut rx_a) = mpsc::channel(1000);

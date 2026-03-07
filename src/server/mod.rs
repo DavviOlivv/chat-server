@@ -4,4 +4,6 @@ pub mod core;
 pub mod database;
 pub mod database_adapter;
 pub mod listener;
+pub mod messaging_adapter;
+pub mod presence_adapter;
 pub mod state;

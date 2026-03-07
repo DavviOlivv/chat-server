@@ -292,6 +292,8 @@ dependencies = [
  "crossterm",
  "dashmap",
  "futures-util",
+ "messaging-application",
+ "messaging-domain",
  "mime_guess",
  "multer",
  "once_cell",
